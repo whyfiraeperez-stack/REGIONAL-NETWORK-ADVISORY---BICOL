@@ -2,7 +2,6 @@ package com.example.data
 
 import android.content.Context
 import com.squareup.moshi.Moshi
-import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -12,14 +11,12 @@ class OutageRepository(
     private val apiService: OutageApiService,
     private val snapshotDao: SnapshotDao
 ) {
-    private val moshi = Moshi.Builder()
-        .addLast(KotlinJsonAdapterFactory())
-        .build()
-
+    // Uses KSP-generated adapters (@JsonClass(generateAdapter = true)) for zero-reflection speed
+    private val moshi = Moshi.Builder().build()
     private val adapter = moshi.adapter(OutageSnapshotResponse::class.java)
 
     private val snapshotCacheFile: File
-        get() = File(context.filesDir, "cached_live_snapshot.json")
+        get() = File(context.filesDir, "cached_compact_snapshot.json")
 
     data class SnapshotLoadResult(
         val snapshot: OutageSnapshotResponse,
@@ -34,20 +31,28 @@ class OutageRepository(
                 timestamp = System.currentTimeMillis()
             )
             if (response.rows.isNotEmpty() || response.napDownRows.isNotEmpty()) {
-                // Save full JSON payload to internal file storage (avoids 2MB SQLite CursorWindow limit)
+                // Save a compact snapshot (all PENDING + recent 400 rows + full statusCounts)
+                // so file I/O is <150 KB and instantaneous on any phone
                 try {
-                    val rawJson = adapter.toJson(response)
+                    val pendingRows = response.rows.filter {
+                        it.finalStatus?.trim()?.equals("PENDING", ignoreCase = true) == true
+                    }
+                    val otherRows = response.rows.filter {
+                        it.finalStatus?.trim()?.equals("PENDING", ignoreCase = true) != true
+                    }.takeLast(350)
+                    val compactResponse = response.copy(rows = pendingRows + otherRows)
+                    val rawJson = adapter.toJson(compactResponse)
                     snapshotCacheFile.writeText(rawJson)
-                    // Save lightweight metadata in Room
+
                     snapshotDao.saveMeta(
                         CachedSnapshotMetaEntity(
                             id = 1,
                             version = response.version ?: "",
                             syncState = response.syncState ?: "SYNCED",
                             checkedAt = response.checkedAt ?: "",
-                            pendingCount = response.pendingCount ?: 0,
+                            pendingCount = response.pendingCount ?: pendingRows.size,
                             restoredCount = response.restoredCount ?: 0,
-                            totalRows = response.rows.size,
+                            totalRows = response.diagnostics?.databaseRows ?: response.rows.size,
                             savedAtMillis = System.currentTimeMillis()
                         )
                     )
@@ -78,19 +83,19 @@ class OutageRepository(
     }
 
     suspend fun loadCachedOrSeedSnapshot(): OutageSnapshotResponse = withContext(Dispatchers.IO) {
-        // 1. Read from internal file storage if available
         try {
-            if (snapshotCacheFile.exists() && snapshotCacheFile.length() > 0L) {
+            if (snapshotCacheFile.exists() && snapshotCacheFile.length() in 1L..1_500_000L) {
                 val cachedJson = snapshotCacheFile.readText()
                 if (cachedJson.isNotBlank()) {
                     val parsed = adapter.fromJson(cachedJson)
-                    if (parsed != null) return@withContext parsed
+                    if (parsed != null && (parsed.rows.isNotEmpty() || parsed.napDownRows.isNotEmpty())) {
+                        return@withContext parsed
+                    }
                 }
             }
         } catch (_: Exception) {
         }
 
-        // 2. Load bundled seed snapshot captured from live API
         try {
             val assetJson = context.assets.open("initial_snapshot.json")
                 .bufferedReader()

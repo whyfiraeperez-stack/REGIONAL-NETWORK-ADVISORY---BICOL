@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.agent.DataIntegrityAgent
 import com.example.data.*
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -23,7 +25,7 @@ enum class DashboardSection(val title: String, val badgeText: String) {
     PROVINCE_PENDING("Province Pending", "BY PROV"),
     OPERATIONS_DETAILS("Ops Details", "6 TABLES"),
     AGENT_AND_FORMULAS("Agent & Formulas", "AUTO-FIX"),
-    EXPORT_CODE("GitHub & Vercel Code", "DEPLOY")
+    WEB_BROWSER_VIEW("Live Web & Vercel", "ONLINE")
 }
 
 data class DatabaseFilters(
@@ -57,7 +59,6 @@ data class DashboardUiState(
     val activeSection: DashboardSection = DashboardSection.LIVE_DASHBOARD,
     val isLeftDrawerOpen: Boolean = false,
     val autoRefreshIntervalSec: Int = 15,
-    val secondsUntilNextRefresh: Int = 15,
     val isAutoRefreshEnabled: Boolean = true,
     val syncErrorBanner: String? = null,
 
@@ -117,10 +118,15 @@ class OutageViewModel(
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
+    // Separate lightweight flow for the countdown timer so it NEVER triggers full-screen recomposition!
+    private val _secondsRemaining = MutableStateFlow(15)
+    val secondsRemaining: StateFlow<Int> = _secondsRemaining.asStateFlow()
+
     private var currentProcessed: DataIntegrityAgent.ProcessedSnapshot? = null
     private var rawStatusCountsFromSnapshot: Map<String, Int>? = null
     private var rawTotalDatabaseRows: Int = 0
     private var timerJob: Job? = null
+    private var filterJob: Job? = null
 
     init {
         loadInitialAndSync()
@@ -130,12 +136,12 @@ class OutageViewModel(
     private fun loadInitialAndSync() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            // First load immediate seed/cache so screen is populated instantaneously
+            // Load seed/cache on Dispatchers.Default so UI renders immediately without blocking Main thread
             val seedSnap = repository.loadCachedOrSeedSnapshot()
-            applySnapshot(seedSnap, isLive = true, errorMsg = null)
+            applySnapshotAsync(seedSnap, isLive = true, errorMsg = null)
             _uiState.update { it.copy(isLoading = false) }
 
-            // Then trigger live network sync
+            // Then trigger live network sync in background
             refreshNow()
         }
     }
@@ -147,11 +153,12 @@ class OutageViewModel(
                 delay(1000L)
                 val state = _uiState.value
                 if (!state.isAutoRefreshEnabled || state.isSyncing) continue
-                val nextSec = state.secondsUntilNextRefresh - 1
+                val nextSec = _secondsRemaining.value - 1
                 if (nextSec <= 0) {
+                    _secondsRemaining.value = state.autoRefreshIntervalSec
                     refreshNow()
                 } else {
-                    _uiState.update { it.copy(secondsUntilNextRefresh = nextSec) }
+                    _secondsRemaining.value = nextSec
                 }
             }
         }
@@ -160,14 +167,11 @@ class OutageViewModel(
     fun refreshNow() {
         if (_uiState.value.isSyncing) return
         viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    isSyncing = true,
-                    secondsUntilNextRefresh = it.autoRefreshIntervalSec
-                )
-            }
+            _uiState.update { it.copy(isSyncing = true) }
+            _secondsRemaining.value = _uiState.value.autoRefreshIntervalSec
+
             val result = repository.fetchLiveOrFallbackSnapshot()
-            applySnapshot(
+            applySnapshotAsync(
                 snapshot = result.snapshot,
                 isLive = result.isLiveFromNetwork,
                 errorMsg = result.errorMessage
@@ -175,28 +179,33 @@ class OutageViewModel(
             _uiState.update {
                 it.copy(
                     isLoading = false,
-                    isSyncing = false,
-                    secondsUntilNextRefresh = it.autoRefreshIntervalSec
+                    isSyncing = false
                 )
             }
+            _secondsRemaining.value = _uiState.value.autoRefreshIntervalSec
         }
     }
 
-    private fun applySnapshot(
+    private suspend fun applySnapshotAsync(
         snapshot: OutageSnapshotResponse,
         isLive: Boolean,
         errorMsg: String?
     ) {
-        rawStatusCountsFromSnapshot = snapshot.statusCounts
-        rawTotalDatabaseRows = snapshot.diagnostics?.databaseRows ?: snapshot.rows.size
-        val processed = DataIntegrityAgent.inspectAndRepair(snapshot, isLive)
-        currentProcessed = processed
-        recomputeFilteredState(
-            processed = processed,
-            dbFilters = _uiState.value.dbFilters,
-            napFilters = _uiState.value.napFilters,
-            syncErrorBanner = errorMsg
-        )
+        val currentState = _uiState.value
+        val newState = withContext(Dispatchers.Default) {
+            rawStatusCountsFromSnapshot = snapshot.statusCounts
+            rawTotalDatabaseRows = snapshot.diagnostics?.databaseRows ?: snapshot.rows.size
+            val processed = DataIntegrityAgent.inspectAndRepair(snapshot, isLive)
+            currentProcessed = processed
+            computeFilteredState(
+                baseState = currentState,
+                processed = processed,
+                dbFilters = currentState.dbFilters,
+                napFilters = currentState.napFilters,
+                syncErrorBanner = errorMsg
+            )
+        }
+        _uiState.value = newState
     }
 
     fun selectSection(section: DashboardSection) {
@@ -215,10 +224,10 @@ class OutageViewModel(
     }
 
     fun setAutoRefreshInterval(seconds: Int) {
+        _secondsRemaining.value = seconds
         _uiState.update {
             it.copy(
                 autoRefreshIntervalSec = seconds,
-                secondsUntilNextRefresh = seconds,
                 isAutoRefreshEnabled = true
             )
         }
@@ -240,13 +249,22 @@ class OutageViewModel(
 
     fun updateDbFilters(transform: (DatabaseFilters) -> DatabaseFilters) {
         val nextFilters = transform(_uiState.value.dbFilters)
+        _uiState.update { it.copy(dbFilters = nextFilters) }
         val proc = currentProcessed ?: return
-        recomputeFilteredState(
-            processed = proc,
-            dbFilters = nextFilters,
-            napFilters = _uiState.value.napFilters,
-            syncErrorBanner = _uiState.value.syncErrorBanner
-        )
+        filterJob?.cancel()
+        filterJob = viewModelScope.launch {
+            val base = _uiState.value
+            val updated = withContext(Dispatchers.Default) {
+                computeFilteredState(
+                    baseState = base,
+                    processed = proc,
+                    dbFilters = nextFilters,
+                    napFilters = base.napFilters,
+                    syncErrorBanner = base.syncErrorBanner
+                )
+            }
+            _uiState.value = updated
+        }
     }
 
     fun resetDbFilters() {
@@ -255,29 +273,38 @@ class OutageViewModel(
 
     fun updateNapFilters(transform: (NapDownFilters) -> NapDownFilters) {
         val nextNap = transform(_uiState.value.napFilters)
+        _uiState.update { it.copy(napFilters = nextNap) }
         val proc = currentProcessed ?: return
-        recomputeFilteredState(
-            processed = proc,
-            dbFilters = _uiState.value.dbFilters,
-            napFilters = nextNap,
-            syncErrorBanner = _uiState.value.syncErrorBanner
-        )
+        filterJob?.cancel()
+        filterJob = viewModelScope.launch {
+            val base = _uiState.value
+            val updated = withContext(Dispatchers.Default) {
+                computeFilteredState(
+                    baseState = base,
+                    processed = proc,
+                    dbFilters = base.dbFilters,
+                    napFilters = nextNap,
+                    syncErrorBanner = base.syncErrorBanner
+                )
+            }
+            _uiState.value = updated
+        }
     }
 
     fun resetNapFilters() {
         updateNapFilters { NapDownFilters() }
     }
 
-    private fun recomputeFilteredState(
+    private fun computeFilteredState(
+        baseState: DashboardUiState,
         processed: DataIntegrityAgent.ProcessedSnapshot,
         dbFilters: DatabaseFilters,
         napFilters: NapDownFilters,
         syncErrorBanner: String?
-    ) {
+    ): DashboardUiState {
         val allDb = processed.cleanedDbRows
         val allNap = processed.cleanedNapDownRows
 
-        // Validate month/date cascading
         val validMonth = if (dbFilters.month == "ALL" || processed.availableMonths.contains(dbFilters.month)) {
             dbFilters.month
         } else "ALL"
@@ -304,33 +331,31 @@ class OutageViewModel(
 
         val queryUpper = normalizedDbFilters.searchQuery.trim().uppercase(Locale.US)
 
-        // Filter DATABASE rows using exact matchDb logic
-        val filteredDb = allDb.filter { r ->
-            if (normalizedDbFilters.province != "ALL" && r.province != normalizedDbFilters.province) return@filter false
-            if (normalizedDbFilters.status != "ALL" && r.finalStatus != normalizedDbFilters.status.uppercase(Locale.US)) return@filter false
-            if (normalizedDbFilters.finding != "ALL" && r.finding != normalizedDbFilters.finding) return@filter false
-            if (normalizedDbFilters.rfo != "ALL" && r.rfo != normalizedDbFilters.rfo) return@filter false
-            if (normalizedDbFilters.concern != "ALL" && r.concern != normalizedDbFilters.concern) return@filter false
-            if (normalizedDbFilters.date != "ALL" && r.dateEndorsedDayKey != normalizedDbFilters.date) return@filter false
-            if (normalizedDbFilters.month != "ALL" && !r.dateEndorsedDayKey.startsWith(normalizedDbFilters.month)) return@filter false
-            if (queryUpper.isNotEmpty()) {
-                val hay = "${r.province} ${r.municipality} ${r.barangay} ${r.facility} ${r.finding} ${r.ospTeam} ${r.rfo} ${r.concern}".uppercase(Locale.US)
-                if (!hay.contains(queryUpper)) return@filter false
+        val filteredDb = if (isUnfilteredGlobal) {
+            allDb
+        } else {
+            allDb.filter { r ->
+                if (normalizedDbFilters.province != "ALL" && r.province != normalizedDbFilters.province) return@filter false
+                if (normalizedDbFilters.status != "ALL" && r.finalStatus != normalizedDbFilters.status.uppercase(Locale.US)) return@filter false
+                if (normalizedDbFilters.finding != "ALL" && r.finding != normalizedDbFilters.finding) return@filter false
+                if (normalizedDbFilters.rfo != "ALL" && r.rfo != normalizedDbFilters.rfo) return@filter false
+                if (normalizedDbFilters.concern != "ALL" && r.concern != normalizedDbFilters.concern) return@filter false
+                if (normalizedDbFilters.date != "ALL" && r.dateEndorsedDayKey != normalizedDbFilters.date) return@filter false
+                if (normalizedDbFilters.month != "ALL" && !r.dateEndorsedDayKey.startsWith(normalizedDbFilters.month)) return@filter false
+                if (queryUpper.isNotEmpty()) {
+                    val hay = "${r.province} ${r.municipality} ${r.barangay} ${r.facility} ${r.finding} ${r.ospTeam} ${r.rfo} ${r.concern}".uppercase(Locale.US)
+                    if (!hay.contains(queryUpper)) return@filter false
+                }
+                true
             }
-            true
         }
 
-        // Compute status counts & KPIs
-        // If global unfiltered & we have full server statusCounts (e.g. when running from seed asset with 10,557 total counts),
-        // use exact server statusCounts so total records = 10,557 and restored = 8,877 even before full 10k rows download.
-        val useServerSummaryCounts = isUnfilteredGlobal &&
-            rawStatusCountsFromSnapshot != null &&
-            allDb.size < rawTotalDatabaseRows
+        val useServerSummaryCounts = isUnfilteredGlobal && rawStatusCountsFromSnapshot != null
 
         val statusMap: Map<String, Int> = if (useServerSummaryCounts) {
             rawStatusCountsFromSnapshot ?: emptyMap()
         } else {
-            val m = mutableMapOf<String, Int>()
+            val m = HashMap<String, Int>()
             for (r in filteredDb) {
                 val s = r.finalStatus.ifEmpty { "BLANK" }
                 m[s] = (m[s] ?: 0) + 1
@@ -348,7 +373,6 @@ class OutageViewModel(
         val restoredCount = statusMap["RESTORED"] ?: filteredDb.count { it.finalStatus == "RESTORED" }
         val pendingRate = if (totalRecords > 0) (pendingCount.toDouble() / totalRecords.toDouble()) * 100.0 else 0.0
 
-        // Sort status table: PENDING always first, then count DESC, then label A-Z
         val statusCountsList = statusMap.entries
             .sortedWith { a, b ->
                 val aPend = a.key.equals("PENDING", ignoreCase = true)
@@ -365,7 +389,6 @@ class OutageViewModel(
                 IssueCountItem(label = status, count = count, percentage = share)
             }
 
-        // Pending vs Restored of the Day
         val selectedDayKey = if (normalizedDbFilters.date != "ALL") {
             normalizedDbFilters.date
         } else {
@@ -381,7 +404,6 @@ class OutageViewModel(
             r.dateRestoredDayKey == selectedDayKey
         }
 
-        // NAP DOWN cascading filters
         val napProvinces = allNap.map { it.province }.filter { it.isNotEmpty() }.distinct().sorted()
         val validNapProvince = if (napFilters.province == "ALL" || napProvinces.contains(napFilters.province)) {
             napFilters.province
@@ -428,8 +450,7 @@ class OutageViewModel(
             true
         }
 
-        // NAP DOWN Pivot Summary (Province x Finding -> Count)
-        val napSummaryMap = mutableMapOf<Pair<String, String>, Int>()
+        val napSummaryMap = HashMap<Pair<String, String>, Int>()
         for (r in filteredNap) {
             val key = Pair(r.province.ifEmpty { "UNKNOWN" }, r.finding.ifEmpty { "BLANK" })
             napSummaryMap[key] = (napSummaryMap[key] ?: 0) + 1
@@ -438,11 +459,9 @@ class OutageViewModel(
             .map { (pair, cnt) -> NapDownPivotSummaryRow(pair.first, pair.second, cnt) }
             .sortedWith(compareBy<NapDownPivotSummaryRow> { it.province }.thenBy { it.finding })
 
-        // Pending rows for Province breakdown & Operations Details
         val pendingRows = filteredDb.filter { it.finalStatus == "PENDING" }
         val restoredRows = filteredDb.filter { it.finalStatus == "RESTORED" }
 
-        // Enrich pendingRows with NAP Code from NAP DOWN sheet if facility is blank
         val napByProvMunFind = allNap.groupBy { Triple(it.province, it.municipality, it.finding) }
         val enrichedPendingRows = pendingRows.mapIndexed { idx, row ->
             if (row.facility.isNotEmpty()) {
@@ -454,7 +473,6 @@ class OutageViewModel(
             }
         }
 
-        // Group Pending by Province
         val provinceGroups = enrichedPendingRows
             .groupBy { it.province.ifEmpty { "UNSPECIFIED" } }
             .entries
@@ -472,7 +490,6 @@ class OutageViewModel(
                 )
             }
 
-        // Operations Details 6 analytical tables
         val pendingByMun = groupAndCount(enrichedPendingRows) { it.municipality.ifEmpty { "UNSPECIFIED" } }
         val pendingByIss = groupAndCount(enrichedPendingRows) {
             it.napStatus.ifEmpty { it.concern.ifEmpty { it.rfo.ifEmpty { "UNSPECIFIED" } } }
@@ -504,47 +521,45 @@ class OutageViewModel(
         val restoredByTech = groupAndCount(restoredRows) { it.ospTeam.ifEmpty { "UNSPECIFIED" } }
         val restoredByMun = groupAndCount(restoredRows) { it.municipality.ifEmpty { "UNSPECIFIED" } }
 
-        _uiState.update { state ->
-            state.copy(
-                syncErrorBanner = syncErrorBanner,
-                agentHealth = processed.agentHealth,
-                dbFilters = normalizedDbFilters,
-                availableMonths = processed.availableMonths,
-                availableDatesForMonth = allowedDates,
-                provinceOptions = processed.filterOptions.province,
-                statusOptions = processed.filterOptions.status,
-                findingOptions = processed.filterOptions.finding,
-                rfoOptions = processed.filterOptions.rfo,
-                concernOptions = processed.filterOptions.concern,
-                totalFilteredRecords = totalRecords,
-                pendingCount = pendingCount,
-                napDownCount = filteredNap.size,
-                restoredCount = restoredCount,
-                pendingRatePercent = pendingRate,
-                statusCountsList = statusCountsList,
-                selectedRestoredDayLabel = formatDayLabel(selectedDayKey),
-                pendingForDayChart = pendingCount,
-                restoredOfDayCount = restoredOfDay,
-                napFilters = normalizedNapFilters,
-                napProvinceOptions = napProvinces,
-                napMunicipalityOptions = napMunicipalities,
-                napBarangayOptions = napBarangays,
-                filteredNapDownRows = filteredNap,
-                napDownPivotSummary = napPivotRows,
-                provincePendingGroups = provinceGroups,
-                pendingByMunicipality = pendingByMun,
-                pendingByIssue = pendingByIss,
-                technicianWorkload = techWorkload,
-                agingBuckets = agingBuckets,
-                restoredByTechnician = restoredByTech,
-                restoredByMunicipality = restoredByMun
-            )
-        }
+        return baseState.copy(
+            syncErrorBanner = syncErrorBanner,
+            agentHealth = processed.agentHealth,
+            dbFilters = normalizedDbFilters,
+            availableMonths = processed.availableMonths,
+            availableDatesForMonth = allowedDates,
+            provinceOptions = processed.filterOptions.province,
+            statusOptions = processed.filterOptions.status,
+            findingOptions = processed.filterOptions.finding,
+            rfoOptions = processed.filterOptions.rfo,
+            concernOptions = processed.filterOptions.concern,
+            totalFilteredRecords = totalRecords,
+            pendingCount = pendingCount,
+            napDownCount = filteredNap.size,
+            restoredCount = restoredCount,
+            pendingRatePercent = pendingRate,
+            statusCountsList = statusCountsList,
+            selectedRestoredDayLabel = formatDayLabel(selectedDayKey),
+            pendingForDayChart = pendingCount,
+            restoredOfDayCount = restoredOfDay,
+            napFilters = normalizedNapFilters,
+            napProvinceOptions = napProvinces,
+            napMunicipalityOptions = napMunicipalities,
+            napBarangayOptions = napBarangays,
+            filteredNapDownRows = filteredNap,
+            napDownPivotSummary = napPivotRows,
+            provincePendingGroups = provinceGroups,
+            pendingByMunicipality = pendingByMun,
+            pendingByIssue = pendingByIss,
+            technicianWorkload = techWorkload,
+            agingBuckets = agingBuckets,
+            restoredByTechnician = restoredByTech,
+            restoredByMunicipality = restoredByMun
+        )
     }
 
     private fun <T> groupAndCount(rows: List<T>, selector: (T) -> String): List<IssueCountItem> {
         if (rows.isEmpty()) return emptyList()
-        val counts = mutableMapOf<String, Int>()
+        val counts = HashMap<String, Int>()
         for (r in rows) {
             val k = selector(r).trim().ifEmpty { "UNSPECIFIED" }
             counts[k] = (counts[k] ?: 0) + 1
@@ -567,7 +582,7 @@ class OutageViewModel(
             return try {
                 val ld = LocalDate.parse(dayKey)
                 ld.format(DateTimeFormatter.ofPattern("dd MMM yyyy", Locale.US))
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 dayKey
             }
         }
@@ -577,7 +592,7 @@ class OutageViewModel(
             return try {
                 val ld = LocalDate.parse("$monthKey-01")
                 ld.format(DateTimeFormatter.ofPattern("MMMM yyyy", Locale.US))
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 monthKey
             }
         }

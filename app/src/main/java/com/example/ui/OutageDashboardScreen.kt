@@ -1,5 +1,7 @@
 package com.example.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -23,9 +25,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -36,6 +38,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.ui.components.*
 import com.example.ui.theme.*
+import kotlinx.coroutines.flow.StateFlow
 import java.util.Locale
 
 @Composable
@@ -45,7 +48,6 @@ fun OutageDashboardScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // Handle Android system back button when on a secondary tab or when left drawer is open
     BackHandler(enabled = state.isLeftDrawerOpen || state.activeSection != DashboardSection.LIVE_DASHBOARD) {
         if (state.isLeftDrawerOpen) {
             viewModel.toggleLeftDrawer(false)
@@ -67,7 +69,6 @@ fun OutageDashboardScreen(
             val isExpandedScreen = maxWidth >= 840.dp
 
             Row(modifier = Modifier.fillMaxSize()) {
-                // On Expanded / Tablet screens, display permanent Left Navigation Rail
                 if (isExpandedScreen) {
                     PermanentLeftNavRail(
                         activeSection = state.activeSection,
@@ -79,7 +80,6 @@ fun OutageDashboardScreen(
                     )
                 }
 
-                // Main Content Area
                 Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                     LazyColumn(
                         modifier = Modifier
@@ -88,14 +88,15 @@ fun OutageDashboardScreen(
                         contentPadding = PaddingValues(
                             top = 12.dp,
                             bottom = 88.dp,
-                            start = if (!isExpandedScreen) 24.dp else 0.dp // space for clickable left-edge DETAILS/NAV tab
+                            start = if (!isExpandedScreen) 24.dp else 0.dp
                         ),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // 1. Top NOC Hero Header Card + Quick Auto-Refresh Bar
-                        item {
+                        // 1. Top NOC Hero Header Card + Isolated Quick Auto-Refresh Bar
+                        item(key = "hero_header") {
                             NocTopHeroHeader(
                                 state = state,
+                                secondsRemainingFlow = viewModel.secondsRemaining,
                                 onRefreshClick = { viewModel.refreshNow() },
                                 onOpenLeftMenu = { viewModel.toggleLeftDrawer(true) },
                                 onIntervalSelect = { viewModel.setAutoRefreshInterval(it) },
@@ -104,7 +105,7 @@ fun OutageDashboardScreen(
                         }
 
                         // 2. Live Self-Healing Agent Status Strip
-                        item {
+                        item(key = "agent_strip") {
                             LiveSourceAgentStrip(
                                 state = state,
                                 onClickInspectAgent = {
@@ -113,8 +114,8 @@ fun OutageDashboardScreen(
                             )
                         }
 
-                        // 3. Horizontal Section Switcher Pills (Synced with Left-Side Clickable Tabs)
-                        item {
+                        // 3. Horizontal Section Switcher Pills
+                        item(key = "section_tabs") {
                             HorizontalSectionTabsBar(
                                 activeSection = state.activeSection,
                                 pendingCount = state.pendingCount,
@@ -126,8 +127,7 @@ fun OutageDashboardScreen(
                         // 4. Render Active Section Content
                         when (state.activeSection) {
                             DashboardSection.LIVE_DASHBOARD -> {
-                                // Global Filters
-                                item {
+                                item(key = "global_filters") {
                                     GlobalDatabaseFiltersPanel(
                                         state = state,
                                         onMonthChange = { m -> viewModel.updateDbFilters { it.copy(month = m, date = "ALL") } },
@@ -142,8 +142,7 @@ fun OutageDashboardScreen(
                                     )
                                 }
 
-                                // 4 KPI Cards + Crimson Pending Alert Banner
-                                item {
+                                item(key = "kpi_grid") {
                                     KpiSummaryGrid(
                                         totalRecords = state.totalFilteredRecords,
                                         pendingCount = state.pendingCount,
@@ -156,10 +155,7 @@ fun OutageDashboardScreen(
                                     )
                                 }
 
-                                // Side-by-side on wide screens or stacked on compact screens:
-                                // Left: DATABASE FINAL STATUS + PENDING VS RESTORED OF THE DAY
-                                // Right: NAP DOWN SPREADSHEET PANEL
-                                item {
+                                item(key = "main_panels") {
                                     if (isExpandedScreen) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -251,8 +247,7 @@ fun OutageDashboardScreen(
                                     }
                                 }
 
-                                // Pending by Province below main panels (just like the full spreadsheet layout)
-                                item {
+                                item(key = "province_pending") {
                                     ProvincePendingSectionView(
                                         groups = state.provincePendingGroups,
                                         expandedProvinces = state.expandedProvinces,
@@ -262,7 +257,7 @@ fun OutageDashboardScreen(
                             }
 
                             DashboardSection.NAP_DOWN_SHEET -> {
-                                item {
+                                item(key = "nap_down_only") {
                                     NapDownSpreadsheetPanel(
                                         napRows = state.filteredNapDownRows,
                                         pivotRows = state.napDownPivotSummary,
@@ -295,7 +290,7 @@ fun OutageDashboardScreen(
                             }
 
                             DashboardSection.PROVINCE_PENDING -> {
-                                item {
+                                item(key = "province_only") {
                                     ProvincePendingSectionView(
                                         groups = state.provincePendingGroups,
                                         expandedProvinces = state.expandedProvinces,
@@ -305,7 +300,7 @@ fun OutageDashboardScreen(
                             }
 
                             DashboardSection.OPERATIONS_DETAILS -> {
-                                item {
+                                item(key = "ops_details_only") {
                                     OperationsDetailsSectionView(
                                         pendingByMunicipality = state.pendingByMunicipality,
                                         pendingByIssue = state.pendingByIssue,
@@ -318,7 +313,7 @@ fun OutageDashboardScreen(
                             }
 
                             DashboardSection.AGENT_AND_FORMULAS -> {
-                                item {
+                                item(key = "agent_only") {
                                     AgentAndFormulasSectionView(
                                         health = state.agentHealth,
                                         onRunVerificationNow = { viewModel.refreshNow() }
@@ -326,15 +321,15 @@ fun OutageDashboardScreen(
                                 }
                             }
 
-                            DashboardSection.EXPORT_CODE -> {
-                                item {
+                            DashboardSection.WEB_BROWSER_VIEW -> {
+                                item(key = "web_browser_only") {
                                     ExportVercelCodeSectionView()
                                 }
                             }
                         }
 
                         // Footer
-                        item {
+                        item(key = "footer") {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -355,7 +350,7 @@ fun OutageDashboardScreen(
                         }
                     }
 
-                    // Clickable Left-Side Vertical Handle Tab (Matches `.details-tab` on the left side of the screen!)
+                    // Clickable Left-Side Vertical Handle Tab
                     ClickableLeftSideTabHandle(
                         onClick = { viewModel.toggleLeftDrawer(true) },
                         pendingCount = state.pendingCount,
@@ -386,8 +381,7 @@ fun OutageDashboardScreen(
                 LeftOperationsSlideDrawer(
                     state = state,
                     onSelectSection = { viewModel.selectSection(it) },
-                    onClose = { viewModel.toggleLeftDrawer(false) },
-                    onRefreshNow = { viewModel.refreshNow() }
+                    onClose = { viewModel.toggleLeftDrawer(false) }
                 )
             }
         }
@@ -420,7 +414,6 @@ private fun ClickableLeftSideTabHandle(
                 tint = Color(0xFF99F6E4),
                 modifier = Modifier.size(16.dp)
             )
-            // Vertical stacked letters "TABS"
             "TABS".forEach { ch ->
                 Text(
                     text = ch.toString(),
@@ -554,8 +547,7 @@ private fun PermanentLeftNavRail(
 private fun LeftOperationsSlideDrawer(
     state: DashboardUiState,
     onSelectSection: (DashboardSection) -> Unit,
-    onClose: () -> Unit,
-    onRefreshNow: () -> Unit
+    onClose: () -> Unit
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -604,7 +596,6 @@ private fun LeftOperationsSlideDrawer(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline)
             }
 
-            // Clickable Navigation Tabs inside Left Drawer
             item {
                 Text(
                     text = "DASHBOARD WORKSPACE TABS",
@@ -661,7 +652,6 @@ private fun LeftOperationsSlideDrawer(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline)
             }
 
-            // Quick Operations Details Preview inside Left Drawer (just like `#detailsDrawer` in the original site!)
             item {
                 Text(
                     text = "QUICK OPERATIONS DETAILS",
@@ -670,7 +660,6 @@ private fun LeftOperationsSlideDrawer(
                 )
             }
 
-            // Aging Summary Mini Card
             item {
                 Card(
                     shape = RoundedCornerShape(10.dp),
@@ -701,7 +690,6 @@ private fun LeftOperationsSlideDrawer(
                 }
             }
 
-            // Technician Workload Mini Card
             item {
                 Card(
                     shape = RoundedCornerShape(10.dp),
@@ -732,7 +720,6 @@ private fun LeftOperationsSlideDrawer(
                 }
             }
 
-            // Top Pending Municipalities Mini Card
             item {
                 Card(
                     shape = RoundedCornerShape(10.dp),
@@ -769,11 +756,14 @@ private fun LeftOperationsSlideDrawer(
 @Composable
 private fun NocTopHeroHeader(
     state: DashboardUiState,
+    secondsRemainingFlow: StateFlow<Int>,
     onRefreshClick: () -> Unit,
     onOpenLeftMenu: () -> Unit,
     onIntervalSelect: (Int) -> Unit,
     onToggleAutoRefresh: () -> Unit
 ) {
+    val context = LocalContext.current
+
     Card(
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -782,7 +772,6 @@ private fun NocTopHeroHeader(
             .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
-            // Subtle Decorative Topology Vector Banner in Top Right
             Image(
                 painter = painterResource(id = R.drawable.ic_noc_topology_banner),
                 contentDescription = null,
@@ -848,7 +837,6 @@ private fun NocTopHeroHeader(
                         }
                     }
 
-                    // Manual Refresh Button
                     Button(
                         onClick = onRefreshClick,
                         enabled = !state.isSyncing,
@@ -875,7 +863,7 @@ private fun NocTopHeroHeader(
                     }
                 }
 
-                // Status Pills & Quick Auto-Refresh Selector Bar
+                // Status Pills & Isolated Quick Auto-Refresh Selector Bar
                 val hScroll = rememberScrollState()
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -901,52 +889,107 @@ private fun NocTopHeroHeader(
                         textColor = if (isLive) StatusGreen else StatusBlue
                     )
 
-                    // Quick Auto-Refresh Interval Chips (10s, 15s, 30s, Pause)
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    // Open in Browser Pill Button (Direct 1-tap launch to Vercel site in phone browser)
+                    Surface(
+                        color = BrandTealDeep,
+                        shape = RoundedCornerShape(999.dp),
                         modifier = Modifier
-                            .clip(RoundedCornerShape(999.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(999.dp))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = null,
-                            tint = BrandTeal,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = if (state.isAutoRefreshEnabled) "AUTO ${state.secondsUntilNextRefresh}s:" else "PAUSED:",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontFamily = JetBrainsMonoFontFamily,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            modifier = Modifier.clickable { onToggleAutoRefresh() }
-                        )
-                        listOf(10, 15, 30).forEach { sec ->
-                            val active = state.isAutoRefreshEnabled && state.autoRefreshIntervalSec == sec
-                            Surface(
-                                color = if (active) BrandTeal else Color.Transparent,
-                                shape = RoundedCornerShape(999.dp),
-                                modifier = Modifier
-                                    .clickable { onIntervalSelect(sec) }
-                                    .testTag("refresh_interval_${sec}s")
-                            ) {
-                                Text(
-                                    text = "${sec}s",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontSize = 9.5.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = if (active) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                                    ),
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
+                            .clickable {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://almasor-outage-monitoring.vercel.app/"))
+                                    context.startActivity(intent)
+                                } catch (_: Exception) {
+                                    copyToClipboard(context, "Vercel URL", "https://almasor-outage-monitoring.vercel.app/")
+                                }
                             }
+                            .testTag("header_open_browser_pill")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = null,
+                                tint = Color(0xFF99F6E4),
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = "OPEN IN BROWSER ↗",
+                                style = MaterialTheme.typography.labelMedium.copy(
+                                    color = Color.White,
+                                    fontWeight = FontWeight.ExtraBold
+                                )
+                            )
                         }
                     }
+
+                    // Isolated Timer Chip so 1s countdown never recomposes the rest of the screen
+                    AutoRefreshCountdownChip(
+                        secondsRemainingFlow = secondsRemainingFlow,
+                        isAutoRefreshEnabled = state.isAutoRefreshEnabled,
+                        autoRefreshIntervalSec = state.autoRefreshIntervalSec,
+                        onToggleAutoRefresh = onToggleAutoRefresh,
+                        onIntervalSelect = onIntervalSelect
+                    )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AutoRefreshCountdownChip(
+    secondsRemainingFlow: StateFlow<Int>,
+    isAutoRefreshEnabled: Boolean,
+    autoRefreshIntervalSec: Int,
+    onToggleAutoRefresh: () -> Unit,
+    onIntervalSelect: (Int) -> Unit
+) {
+    val secondsLeft by secondsRemainingFlow.collectAsStateWithLifecycle()
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(999.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.Refresh,
+            contentDescription = null,
+            tint = BrandTeal,
+            modifier = Modifier.size(14.dp)
+        )
+        Text(
+            text = if (isAutoRefreshEnabled) "AUTO ${secondsLeft}s:" else "PAUSED:",
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontFamily = JetBrainsMonoFontFamily,
+                fontWeight = FontWeight.Bold
+            ),
+            modifier = Modifier.clickable { onToggleAutoRefresh() }
+        )
+        listOf(10, 15, 30).forEach { sec ->
+            val active = isAutoRefreshEnabled && autoRefreshIntervalSec == sec
+            Surface(
+                color = if (active) BrandTeal else Color.Transparent,
+                shape = RoundedCornerShape(999.dp),
+                modifier = Modifier
+                    .clickable { onIntervalSelect(sec) }
+                    .testTag("refresh_interval_${sec}s")
+            ) {
+                Text(
+                    text = "${sec}s",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 9.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (active) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                    ),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                )
             }
         }
     }

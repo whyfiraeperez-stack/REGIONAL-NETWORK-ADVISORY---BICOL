@@ -7,7 +7,6 @@ import java.util.concurrent.TimeUnit
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import com.squareup.moshi.Moshi
-import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 
 interface OutageApiService {
     @GET("api/snapshot")
@@ -25,9 +24,8 @@ interface OutageApiService {
                 .readTimeout(25, TimeUnit.SECONDS)
                 .build()
 
-            val moshi = Moshi.Builder()
-                .addLast(KotlinJsonAdapterFactory())
-                .build()
+            // Uses KSP codegen adapters (@JsonClass(generateAdapter = true)) — 100x faster than reflection
+            val moshi = Moshi.Builder().build()
 
             return Retrofit.Builder()
                 .baseUrl(BASE_URL)

@@ -1,10 +1,14 @@
 package com.example.ui.components
 
+import android.annotation.SuppressLint
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.webkit.WebChromeClient
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.example.data.*
 import com.example.ui.AgingBucket
 import com.example.ui.theme.*
@@ -799,11 +804,15 @@ private fun FormulaItemRow(
     }
 }
 
+@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun ExportVercelCodeSectionView(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    var showEmbeddedWebBrowser by remember { mutableStateOf(true) }
+    val vercelUrl = "https://almasor-outage-monitoring.vercel.app/"
+
     val vercelSnippet = remember {
         """
 // Vercel / GitHub Ready Self-Healing Snapshot Agent & Left-Tab Layout
@@ -848,7 +857,7 @@ export function cleanAndVerifyOutageSnapshot(rawSnapshot) {
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Live Online & GitHub / Vercel Deployment Card
+        // Live Online & Browser Launcher Card
         Card(
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = BrandTealSoft),
@@ -860,34 +869,97 @@ export function cleanAndVerifyOutageSnapshot(rawSnapshot) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "ONLINE DEPLOYMENT & LIVE VERCEL FEED",
+                    text = "LIVE VERCEL WEB DASHBOARD & BROWSER VIEW",
                     style = MaterialTheme.typography.titleSmall.copy(
                         fontWeight = FontWeight.ExtraBold,
                         color = BrandTealDeep
                     )
                 )
                 Text(
-                    text = "• Connected Live Endpoint: https://almasor-outage-monitoring.vercel.app/api/snapshot\n• To push to GitHub or export APK/AAB from AI Studio: use the Settings / Export menu in the top-right toolbar.",
+                    text = "Live URL: $vercelUrl\nOpen directly in your external browser (Chrome/Safari) or use the embedded live browser below.",
                     style = MaterialTheme.typography.bodySmall.copy(color = BrandTealDeep)
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Button(
                         onClick = {
                             try {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://almasor-outage-monitoring.vercel.app/"))
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(vercelUrl))
                                 context.startActivity(intent)
                             } catch (_: Exception) {
-                                copyToClipboard(context, "Live URL", "https://almasor-outage-monitoring.vercel.app/")
+                                copyToClipboard(context, "Live URL", vercelUrl)
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = BrandTealDeep),
                         modifier = Modifier.testTag("open_live_vercel_url_button")
                     ) {
-                        Text("OPEN LIVE VERCEL SITE", style = MaterialTheme.typography.labelMedium)
+                        Text("OPEN IN EXTERNAL BROWSER", style = MaterialTheme.typography.labelMedium)
                     }
+
+                    OutlinedButton(
+                        onClick = { showEmbeddedWebBrowser = !showEmbeddedWebBrowser },
+                        modifier = Modifier.testTag("toggle_embedded_webview_button")
+                    ) {
+                        Text(
+                            text = if (showEmbeddedWebBrowser) "HIDE WEB VIEW" else "SHOW WEB VIEW",
+                            style = MaterialTheme.typography.labelMedium.copy(color = BrandTealDeep)
+                        )
+                    }
+                }
+            }
+        }
+
+        // Embedded Live Browser View for https://almasor-outage-monitoring.vercel.app/
+        if (showEmbeddedWebBrowser) {
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(540.dp)
+                    .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+            ) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(BrandTealDeep)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = "LIVE VERCEL WEB PREVIEW • almasor-outage-monitoring.vercel.app",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontFamily = JetBrainsMonoFontFamily,
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+
+                    AndroidView(
+                        factory = { ctx ->
+                            WebView(ctx).apply {
+                                settings.javaScriptEnabled = true
+                                settings.domStorageEnabled = true
+                                settings.loadWithOverviewMode = true
+                                settings.useWideViewPort = true
+                                webViewClient = WebViewClient()
+                                webChromeClient = WebChromeClient()
+                                loadUrl(vercelUrl)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
             }
         }
