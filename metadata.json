@@ -1,0 +1,6 @@
+{
+  "name": "Bicol NAP Monitor",
+  "description": "Live Bicol NAP Outage Monitoring Dashboard linked to Google Sheets with automated formula verification, self-healing data agent, and clickable left-side navigation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

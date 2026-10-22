@@ -1,0 +1,24 @@
+<resources>
+    <string name="app_name">Bicol NAP Monitor</string>
+    <string name="kicker_noc">NETWORK OPERATIONS • BICOL</string>
+    <string name="header_title">BICOL NAP OUTAGE MONITORING</string>
+    <string name="header_subtitle">Live operational view of NAP outages, final status, ageing, spreadsheet formulas &amp; province-level pending work.</string>
+    <string name="ops_view_live">OPS VIEW • LIVE</string>
+    <string name="sync_agent_synced">SYNC AGENT • SYNCED</string>
+    <string name="sync_agent_cached">SYNC AGENT • CACHED SNAPSHOT</string>
+    <string name="sync_agent_error">SYNC AGENT • RECOVERING</string>
+    <string name="btn_refresh">REFRESH</string>
+    <string name="btn_syncing">SYNCING…</string>
+    <string name="btn_reset_filters">RESET FILTERS</string>
+    <string name="btn_clear_nap_filters">CLEAR FILTERS</string>
+    <string name="kpi_total_records">TOTAL RECORDS</string>
+    <string name="kpi_pending">PENDING / NAP DOWN</string>
+    <string name="kpi_restored">RESTORED</string>
+    <string name="kpi_pending_rate">PENDING RATE</string>
+    <string name="tab_overview">Live Dashboard</string>
+    <string name="tab_nap_down">NAP DOWN Sheet</string>
+    <string name="tab_province">Province Pending</string>
+    <string name="tab_ops_details">Ops Details</string>
+    <string name="tab_agent_formulas">Agent &amp; Formulas</string>
+    <string name="tab_export_code">GitHub / Vercel Code</string>
+</resources>

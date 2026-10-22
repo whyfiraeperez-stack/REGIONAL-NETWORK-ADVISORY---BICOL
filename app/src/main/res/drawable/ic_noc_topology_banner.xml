@@ -1,0 +1,33 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="360dp"
+    android:height="120dp"
+    android:viewportWidth="360"
+    android:viewportHeight="120">
+    <path android:pathData="M0,0h360v120h-360z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="0"
+                android:startY="0"
+                android:endX="360"
+                android:endY="120"
+                android:type="linear">
+                <item android:offset="0.0" android:color="#004E4A" />
+                <item android:offset="0.55" android:color="#006F6B" />
+                <item android:offset="1.0" android:color="#008D87" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- Fiber Network Topology Grid & Nodes -->
+    <path
+        android:strokeColor="#22FFFFFF"
+        android:strokeWidth="1"
+        android:pathData="M0,30 L360,30 M0,60 L360,60 M0,90 L360,90 M60,0 L60,120 M120,0 L120,120 M180,0 L180,120 M240,0 L240,120 M300,0 L300,120" />
+    <path
+        android:strokeColor="#6699F6E4"
+        android:strokeWidth="2"
+        android:pathData="M20,85 L85,45 L155,75 L235,35 L305,65 L345,25" />
+    <path
+        android:fillColor="#99F6E4"
+        android:pathData="M85,45m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0 M155,75m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0 M235,35m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0 M305,65m-4,0a4,4 0,1 1,8 0a4,4 0,1 1,-8 0" />
+</vector>
