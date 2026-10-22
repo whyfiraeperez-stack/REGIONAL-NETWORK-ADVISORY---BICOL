@@ -80,7 +80,7 @@ fun GlobalDatabaseFiltersPanel(
                         modifier = Modifier.clickable { filtersExpanded = !filtersExpanded }
                     ) {
                         Icon(
-                            imageVector = Icons.Default.FilterList,
+                            imageVector = Icons.Default.Search,
                             contentDescription = null,
                             tint = BrandTeal,
                             modifier = Modifier.size(18.dp)
@@ -122,7 +122,7 @@ fun GlobalDatabaseFiltersPanel(
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
-                                imageVector = if (filtersExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                imageVector = if (filtersExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                                 contentDescription = "Toggle Filters"
                             )
                         }
@@ -346,7 +346,7 @@ fun KpiSummaryGrid(
                         .background(AlertCrimson.copy(alpha = 0.14f))
                 ) {
                     Icon(
-                        imageVector = Icons.Default.WarningAmber,
+                        imageVector = Icons.Default.Warning,
                         contentDescription = null,
                         tint = AlertCrimson,
                         modifier = Modifier.size(22.dp)

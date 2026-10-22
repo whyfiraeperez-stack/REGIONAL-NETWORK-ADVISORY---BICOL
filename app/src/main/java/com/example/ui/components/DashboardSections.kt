@@ -3,6 +3,8 @@ package com.example.ui.components
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -42,7 +44,6 @@ fun ProvincePendingSectionView(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Section Header
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
                 text = "PENDING BY PROVINCE",
@@ -90,7 +91,6 @@ fun ProvincePendingSectionView(
                     .testTag("province_card_${group.province.lowercase(Locale.US)}")
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    // Accordion Header
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -131,7 +131,7 @@ fun ProvincePendingSectionView(
                             }
                         }
                         Icon(
-                            imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                             contentDescription = if (isExpanded) "Collapse" else "Expand",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -144,7 +144,6 @@ fun ProvincePendingSectionView(
                                 .padding(12.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            // Issue Summary Table for this Province
                             Text(
                                 text = "ISSUE BREAKDOWN (${group.province})",
                                 style = MaterialTheme.typography.labelMedium,
@@ -194,7 +193,6 @@ fun ProvincePendingSectionView(
                                 }
                             }
 
-                            // Horizontal Scrollable Detail Table matching spreadsheet columns
                             Text(
                                 text = "LIVE PENDING RECORDS (${group.detailRows.size})",
                                 style = MaterialTheme.typography.labelMedium,
@@ -328,7 +326,6 @@ fun OperationsDetailsSectionView(
             )
         }
 
-        // 1. Aging Monitor Card
         AnalyticalCardFrame(title = "1. AGING MONITOR (PENDING SLA)") {
             agingBuckets.forEach { bucket ->
                 val dotColor = when (bucket.severityColor) {
@@ -374,7 +371,6 @@ fun OperationsDetailsSectionView(
             }
         }
 
-        // 2. Technician Workload
         AnalyticalCardFrame(title = "2. TECHNICIAN WORKLOAD (ACTIVE PENDING & OLDEST AGE)") {
             Row(
                 modifier = Modifier
@@ -414,28 +410,24 @@ fun OperationsDetailsSectionView(
             }
         }
 
-        // 3. Pending by Issue
         StandardIssueCountTableCard(
             title = "3. PENDING BY ISSUE / FINDING",
             colHeader = "ISSUE",
             items = pendingByIssue
         )
 
-        // 4. Pending by Municipality
         StandardIssueCountTableCard(
             title = "4. PENDING BY MUNICIPALITY",
             colHeader = "MUNICIPALITY",
             items = pendingByMunicipality
         )
 
-        // 5. Restored by Technician
         StandardIssueCountTableCard(
             title = "5. RESTORED BY TECHNICIAN",
             colHeader = "TECHNICIAN",
             items = restoredByTechnician
         )
 
-        // 6. Restored by Municipality
         StandardIssueCountTableCard(
             title = "6. RESTORED BY MUNICIPALITY (TOP 25)",
             colHeader = "MUNICIPALITY",
@@ -542,7 +534,6 @@ fun AgentAndFormulasSectionView(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // Header Banner
         Card(
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = BrandTealDeep),
@@ -564,7 +555,7 @@ fun AgentAndFormulasSectionView(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.VerifiedUser,
+                            imageVector = Icons.Default.CheckCircle,
                             contentDescription = null,
                             tint = Color(0xFF99F6E4),
                             modifier = Modifier.size(26.dp)
@@ -593,7 +584,7 @@ fun AgentAndFormulasSectionView(
                         modifier = Modifier.testTag("run_agent_audit_button")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Sync,
+                            imageVector = Icons.Default.Refresh,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp)
                         )
@@ -617,7 +608,6 @@ fun AgentAndFormulasSectionView(
             }
         }
 
-        // Exact Spreadsheet Formula Reference Card
         Card(
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -663,7 +653,6 @@ fun AgentAndFormulasSectionView(
             }
         }
 
-        // Self-Healing Repair Logs
         Text(
             text = "ACTIVE AGENT DIAGNOSTICS & REPAIR LOGS",
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.ExtraBold),
@@ -741,7 +730,7 @@ fun AgentAndFormulasSectionView(
                                 modifier = Modifier.size(28.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.ContentCopy,
+                                    imageVector = Icons.Default.Share,
                                     contentDescription = "Copy formula",
                                     tint = BrandTeal,
                                     modifier = Modifier.size(15.dp)
@@ -859,6 +848,50 @@ export function cleanAndVerifyOutageSnapshot(rawSnapshot) {
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // Live Online & GitHub / Vercel Deployment Card
+        Card(
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(containerColor = BrandTealSoft),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, BrandTealLine, RoundedCornerShape(12.dp))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "ONLINE DEPLOYMENT & LIVE VERCEL FEED",
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        color = BrandTealDeep
+                    )
+                )
+                Text(
+                    text = "• Connected Live Endpoint: https://almasor-outage-monitoring.vercel.app/api/snapshot\n• To push to GitHub or export APK/AAB from AI Studio: use the Settings / Export menu in the top-right toolbar.",
+                    style = MaterialTheme.typography.bodySmall.copy(color = BrandTealDeep)
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://almasor-outage-monitoring.vercel.app/"))
+                                context.startActivity(intent)
+                            } catch (_: Exception) {
+                                copyToClipboard(context, "Live URL", "https://almasor-outage-monitoring.vercel.app/")
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = BrandTealDeep),
+                        modifier = Modifier.testTag("open_live_vercel_url_button")
+                    ) {
+                        Text("OPEN LIVE VERCEL SITE", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+        }
+
         Card(
             shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -879,7 +912,7 @@ export function cleanAndVerifyOutageSnapshot(rawSnapshot) {
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "GITHUB & VERCEL DEPLOYMENT CODE",
+                            text = "GITHUB & VERCEL SERVERLESS AGENT CODE",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold),
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -896,7 +929,7 @@ export function cleanAndVerifyOutageSnapshot(rawSnapshot) {
                         colors = ButtonDefaults.buttonColors(containerColor = BrandTeal),
                         modifier = Modifier.testTag("copy_vercel_code_button")
                     ) {
-                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("COPY CODE", style = MaterialTheme.typography.labelMedium)
                     }

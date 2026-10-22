@@ -415,7 +415,7 @@ private fun ClickableLeftSideTabHandle(
             modifier = Modifier.padding(horizontal = 6.dp, vertical = 14.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.MenuOpen,
+                imageVector = Icons.Default.Menu,
                 contentDescription = "Open Left Operations Tab",
                 tint = Color(0xFF99F6E4),
                 modifier = Modifier.size(16.dp)
@@ -491,7 +491,7 @@ private fun PermanentLeftNavRail(
                     modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Analytics,
+                        imageVector = Icons.Default.Info,
                         contentDescription = "Open Quick Details Drawer",
                         tint = BrandTeal
                     )
@@ -912,7 +912,7 @@ private fun NocTopHeroHeader(
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Timer,
+                            imageVector = Icons.Default.Refresh,
                             contentDescription = null,
                             tint = BrandTeal,
                             modifier = Modifier.size(14.dp)

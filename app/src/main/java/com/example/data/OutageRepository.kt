@@ -5,6 +5,7 @@ import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class OutageRepository(
     private val context: Context,
@@ -16,6 +17,9 @@ class OutageRepository(
         .build()
 
     private val adapter = moshi.adapter(OutageSnapshotResponse::class.java)
+
+    private val snapshotCacheFile: File
+        get() = File(context.filesDir, "cached_live_snapshot.json")
 
     data class SnapshotLoadResult(
         val snapshot: OutageSnapshotResponse,
@@ -30,15 +34,26 @@ class OutageRepository(
                 timestamp = System.currentTimeMillis()
             )
             if (response.rows.isNotEmpty() || response.napDownRows.isNotEmpty()) {
-                // Save to local Room cache
-                val rawJson = adapter.toJson(response)
-                snapshotDao.saveSnapshot(
-                    CachedSnapshotEntity(
-                        id = 1,
-                        rawJson = rawJson,
-                        savedAtMillis = System.currentTimeMillis()
+                // Save full JSON payload to internal file storage (avoids 2MB SQLite CursorWindow limit)
+                try {
+                    val rawJson = adapter.toJson(response)
+                    snapshotCacheFile.writeText(rawJson)
+                    // Save lightweight metadata in Room
+                    snapshotDao.saveMeta(
+                        CachedSnapshotMetaEntity(
+                            id = 1,
+                            version = response.version ?: "",
+                            syncState = response.syncState ?: "SYNCED",
+                            checkedAt = response.checkedAt ?: "",
+                            pendingCount = response.pendingCount ?: 0,
+                            restoredCount = response.restoredCount ?: 0,
+                            totalRows = response.rows.size,
+                            savedAtMillis = System.currentTimeMillis()
+                        )
                     )
-                )
+                } catch (_: Exception) {
+                }
+
                 return@withContext SnapshotLoadResult(
                     snapshot = response,
                     isLiveFromNetwork = true,
@@ -46,7 +61,6 @@ class OutageRepository(
                 )
             }
         } catch (e: Exception) {
-            // Fall through to Room cache or bundled initial snapshot
             val fallback = loadCachedOrSeedSnapshot()
             return@withContext SnapshotLoadResult(
                 snapshot = fallback,
@@ -64,16 +78,19 @@ class OutageRepository(
     }
 
     suspend fun loadCachedOrSeedSnapshot(): OutageSnapshotResponse = withContext(Dispatchers.IO) {
+        // 1. Read from internal file storage if available
         try {
-            val cached = snapshotDao.getCachedSnapshot()
-            if (cached != null && cached.rawJson.isNotBlank()) {
-                val parsed = adapter.fromJson(cached.rawJson)
-                if (parsed != null) return@withContext parsed
+            if (snapshotCacheFile.exists() && snapshotCacheFile.length() > 0L) {
+                val cachedJson = snapshotCacheFile.readText()
+                if (cachedJson.isNotBlank()) {
+                    val parsed = adapter.fromJson(cachedJson)
+                    if (parsed != null) return@withContext parsed
+                }
             }
         } catch (_: Exception) {
         }
 
-        // Load bundled seed snapshot captured from live API
+        // 2. Load bundled seed snapshot captured from live API
         try {
             val assetJson = context.assets.open("initial_snapshot.json")
                 .bufferedReader()
