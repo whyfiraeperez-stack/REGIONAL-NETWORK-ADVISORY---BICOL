@@ -2,7 +2,7 @@ const ID="1DgYA7-nM4DoVg70YOEGlu4Au7nb7xNpdSzyW8BZFsOg";
 const TABS=["DATABASE","DAILY REPORT","BACKBONE LIST","OUTAGE ADVISORY"];
 function parseCsv(s){const rows=[];let row=[],cell="",q=false;for(let i=0;i<s.length;i++){const c=s[i];if(c==='"'){if(q&&s[i+1]==='"'){cell+='"';i++;}else q=!q;}else if(c===","&&!q){row.push(cell);cell="";}else if((c==="\n"||c==="\r")&&!q){if(c==="\r"&&s[i+1]==="\n")i++;row.push(cell);if(row.some(x=>x.trim()))rows.push(row);row=[];cell="";}else cell+=c;}if(cell.length||row.length){row.push(cell);if(row.some(x=>x.trim()))rows.push(row);}return rows;}
 async function readTab(name){
- const url="https://docs.google.com/spreadsheets/d/"+ID+"/gviz/tq?tqx=out:csv&sheet="+encodeURIComponent(name)+"&tq="+encodeURIComponent("select *");
+ const url="https://docs.google.com/spreadsheets/d/"+ID+"/gviz/tq?tqx=out:csv&sheet="+encodeURIComponent(name)+"&tq="+encodeURIComponent("select *")+"&_="+Date.now();
  try{
   const r=await fetch(url,{cache:"no-store"});
   const text=await r.text();
