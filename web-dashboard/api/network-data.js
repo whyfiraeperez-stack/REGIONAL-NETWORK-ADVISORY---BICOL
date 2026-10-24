@@ -8,7 +8,9 @@ async function readTab(name){
   const text=await r.text();
   if(!r.ok||/<html|accounts\.google\.com|sign in|google\.visualization\.Query\.setResponse/i.test(text.slice(0,500)))return {name,found:false,headers:[],rows:[],error:"Tab unavailable"};
   const matrix=parseCsv(text);if(!matrix.length)return {name,found:false,headers:[],rows:[]};
-  const headers=matrix[0].map((h,i)=>String(h||"COLUMN_"+(i+1)).trim());
+  const rawHeaders=matrix[0].map((h,i)=>String(h||"COLUMN_"+(i+1)).trim());
+  const namedByColumn={4:"BB UP",5:"BB DOWN",6:"BB TOTAL",7:"BB % Restored",10:"OLT UP",11:"OLT DOWN",12:"OLT TOTAL",13:"OLT % Restored",16:"LCP UP",17:"LCP Impact Type",18:"LCP DOWN",19:"LCP TOTAL",20:"LCP % Down",23:"NAP UP",24:"NAP DOWN",25:"NAP TOTAL",26:"NAP % Down"};
+  const headers=rawHeaders.map((h,i)=>namedByColumn[i]||h);
   const rows=matrix.slice(1).map((cells,i)=>{const o={_rowNumber:i+2};headers.forEach((h,j)=>o[h]=cells[j]||"");return o;}).filter(o=>headers.some(h=>String(o[h]||"").trim()));
   return {name,found:true,headers,rows};
  }catch(e){return {name,found:false,headers:[],rows:[],error:"Read failed"};}
