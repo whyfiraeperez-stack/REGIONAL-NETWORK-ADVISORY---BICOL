@@ -35,27 +35,12 @@ function renderDailyReport(sheet){
  const clean=v=>String(v??"").trim();
  const norm=s=>clean(s).toLowerCase().replace(/[^a-z0-9]/g,"");
  const col=(...aliases)=>headers.find(h=>aliases.some(a=>norm(h)===norm(a)));
- const downHeader=col("BB DOWN","BB DOWN TOTAL","BACKBONE DOWN");
- const totalRows=rows.filter(r=>Object.values(r).some(v=>clean(v).toUpperCase()==="TOTAL"));
- const metricValue=(header)=>{
-  if(!header)return null;
-  const total=totalRows.find(r=>clean(r[header]).toUpperCase()==="TOTAL");
-  if(total&&clean(total[header]))return clean(total[header]);
-  return null;
- };
- const metrics=[
-  ["BB DOWN",col("BB DOWN","BB DOWN TOTAL","BACKBONE DOWN")],
-  ["OLT DOWN",col("OLT DOWN","OLT DOWN TOTAL")],
-  ["LCP DOWN",col("LCP DOWN","LCP DOWN TOTAL")],
-  ["NAP DOWN",col("NAP DOWN","NAP DOWN TOTAL")]
- ].filter(x=>x[1]);
- const statHtml=metrics.length?'<div class="daily-statrow">'+metrics.map(([label,h])=>'<div class="daily-stat"><span>'+e(label)+'</span><b>'+e(metricValue(h)??"—")+'</b></div>').join("")+'</div>':"";
  const headerHtml=headers.map(h=>'<th>'+e(h)+'</th>').join("");
  const bodyHtml=rows.map(r=>{
   const isTotal=Object.values(r).some(v=>clean(v).toUpperCase()==="TOTAL");
   return '<tr class="'+(isTotal?'total-row':'')+'">'+headers.map(h=>'<td title="'+e(clean(r[h]))+'">'+e(clean(r[h])||"—")+'</td>').join("")+'</tr>';
  }).join("");
- host.innerHTML='<section class="daily-card full"><div class="daily-head"><div><h3>DAILY REPORT — SOURCE DATA</h3><small>Displays the original spreadsheet headers, rows and cell values without renaming columns or guessing meanings.</small></div><span class="live">● LIVE SHEET</span></div>'+statHtml+'<div class="daily-scroll"><table class="daily-table"><thead><tr>'+headerHtml+'</tr></thead><tbody>'+bodyHtml+'</tbody></table></div><div class="daily-note">Source: '+e(payload?.source||"Google Sheets")+' · '+rows.length+' source rows · '+headers.length+' columns · Last fetched '+e(payload?.generatedAt?new Date(payload.generatedAt).toLocaleString("en-PH",{timeZone:"Asia/Manila"}):"just now")+'. Auto-refresh runs every 30 seconds.</div></section>';
+ host.innerHTML='<section class="daily-card full"><div class="daily-head"><div><h3>DAILY REPORT — SOURCE DATA</h3><small>Displays the original spreadsheet headers, rows and cell values without renaming columns or guessing meanings.</small></div><span class="live">● LIVE SHEET</span></div><div class="daily-scroll"><table class="daily-table"><thead><tr>'+headerHtml+'</tr></thead><tbody>'+bodyHtml+'</tbody></table></div><div class="daily-note">Source: '+e(payload?.source||"Google Sheets")+' · '+rows.length+' source rows · '+headers.length+' columns · Last fetched '+e(payload?.generatedAt?new Date(payload.generatedAt).toLocaleString("en-PH",{timeZone:"Asia/Manila"}):"just now")+'. Auto-refresh runs every 30 seconds.</div></section>';
 }
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
 async function refresh(){ $("refresh").disabled=true;$("syncStatus").textContent="● Syncing…";try{const r=await fetch("/api/network-data",{cache:"no-store"});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||"Spreadsheet API request failed");payload=d;$("error").style.display="none";$("dot").classList.remove("off");$("connection").textContent="Connected · auto-sync";$("syncStatus").textContent="● Spreadsheet connected";if($("lastSync"))$("lastSync").textContent="Last sync: "+new Date().toLocaleTimeString("en-PH",{timeZone:"Asia/Manila"});const years=new Set();((d.sheets||[]).find(s=>s.name==="DATABASE")?.rows||[]).forEach(r=>{const v=field(r,"DOWNTIME","DATE RECEIVED","DATE RESTORED");const m=v.match(/20\d{2}/);if(m)years.add(m[0])});const y=$("year"),old=y.value;y.innerHTML='<option value="all">All years</option>'+[...years].sort().reverse().map(a=>'<option value="'+a+'">'+a+'</option>').join("");y.value=[...years].includes(old)?old:"all";render()}catch(e){$("error").style.display="block";$("error").textContent="Spreadsheet connection error: "+e.message+" · Check Vercel environment variables and Apps Script deployment.";$("dot").classList.add("off");$("connection").textContent="Connection issue";$("syncStatus").textContent="● Disconnected"}finally{$("refresh").disabled=false}}
