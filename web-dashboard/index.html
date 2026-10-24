@@ -41,7 +41,7 @@ function renderDailyReport(sheet){
  const olt=matrix.slice(0,6).map(r=>[val(r,9)]).filter(r=>r[0]&&r[0].toUpperCase()!=="TOTAL");
  const lcpFaults=matrix.slice(7).map(r=>[val(r,15),val(r,17),val(r,20)]).filter(r=>r.some(Boolean));
  const nap=matrix.slice(0,6).map(r=>[val(r,22)]).filter(r=>r[0]&&r[0].toUpperCase()!=="TOTAL");
- const reportTitle=val(matrix[0],3)||"DAILY NETWORK REPORT";
+ const reportTitle="NETWORK FAULT SUMMARY REPORT";
  const stats='<div class="daily-statrow"><div class="daily-stat"><span>BACKBONE UP</span><b>'+e(totals?.[1]||"—")+'</b></div><div class="daily-stat"><span>BACKBONE DOWN</span><b>'+e(totals?.[2]||"—")+'</b></div><div class="daily-stat"><span>BACKBONE TOTAL</span><b>'+e(totals?.[3]||"—")+'</b></div><div class="daily-stat"><span>RESTORED</span><b>'+e(totals?.[4]||"—")+'</b></div></div>';
  host.innerHTML='<section class="daily-card full"><div class="daily-head"><div><h3>'+e(reportTitle)+'</h3><small>Live DAILY REPORT values in a dashboard table layout, without copying the spreadsheet's merged-cell formatting.</small></div><span class="live">● LIVE SHEET</span></div>'+stats+'</section>'+
  table("BACKBONE SUMMARY",["NETWORK TYPE","UP","DOWN","TOTAL","% RESTORED"],summary,true)+
