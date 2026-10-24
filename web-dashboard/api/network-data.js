@@ -17,10 +17,10 @@ function rowsToSheet(name,matrix){
  if(!matrix.length)return {name,found:false,headers:[],rows:[],error:"Empty or unavailable tab"};
  const headers=matrix[0].map((h,i)=>String(h||"COLUMN_"+(i+1)).trim());
  const rows=matrix.slice(1).map((cells,i)=>{
-  const record={_rowNumber:i+2};
+  const record={_rowNumber:i+2,_cells:cells.slice()};
   headers.forEach((h,j)=>record[h]=cells[j]??"");
   return record;
- }).filter(r=>headers.some(h=>String(r[h]??"").trim()));
+ }).filter((r,i)=>matrix[i+1].some(v=>String(v??"").trim()));
  return {name,found:true,headers,rows};
 }
 async function readTabCsv(name){
