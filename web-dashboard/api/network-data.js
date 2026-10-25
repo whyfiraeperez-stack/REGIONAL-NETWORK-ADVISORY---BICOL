@@ -1,5 +1,5 @@
 const ID="1DgYA7-nM4DoVg70YOEGlu4Au7nb7xNpdSzyW8BZFsOg";
-const TABS=["DATABASE","DAILY REPORT","BACKBONE LIST","OUTAGE ADVISORY"];
+const TABS=["DATABASE","DAILY REPORT","BACKBONE LIST","OUTAGE ADVISORY","NAP LOCATOR"];
 
 function parseCsv(s){
  const rows=[];let row=[],cell="",quoted=false;
@@ -52,6 +52,11 @@ module.exports=async function(req,res){
   if(!data){
    const sheets=await Promise.all(TABS.map(async name=>{try{return await readTabCsv(name)}catch(e){return {name,found:false,headers:[],rows:[],error:"Read failed: "+e.message}}}));
    data={ok:true,spreadsheetId:ID,generatedAt:new Date().toISOString(),sheets};
+  } else {
+   const existing=new Set((data.sheets||[]).map(s=>String(s.name||"").trim().toUpperCase()));
+   if(!existing.has("NAP LOCATOR")){
+    try{data.sheets.push(await readTabCsv("NAP LOCATOR"));}catch(e){data.sheets.push({name:"NAP LOCATOR",found:false,headers:[],rows:[],error:"Read failed: "+e.message});}
+   }
   }
   data.sheets=(data.sheets||[]).map(s=>({...s,headers:Array.isArray(s.headers)?s.headers:[],rows:(Array.isArray(s.rows)?s.rows:[]).map(row=>{if(s.name==="DAILY REPORT")return row;const { _cells, ...compactRow }=row;return compactRow;})}));
   if(!data.sheets.some(s=>s.found))return res.status(502).json({ok:false,error:"Could not read the expected worksheet tabs. Verify sheet access and exact tab names.",sheets:data.sheets});
