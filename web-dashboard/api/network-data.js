@@ -44,14 +44,17 @@ module.exports=async function(req,res){
  res.setHeader("X-Content-Type-Options","nosniff");
  if(req.method!=="GET"){res.setHeader("Allow","GET");return res.status(405).json({ok:false,error:"Method not allowed"});}
  try{
-  let data,source="Google Sheets CSV export";
+  let data,source="Google Sheets CSV export",appsScriptError="";
   try{data=await readFromAppsScript();if(data)source="Authenticated Google Apps Script";}catch(error){
-   console.error("Apps Script read failed:",error.message);
-   return res.status(502).json({ok:false,error:"The authenticated Google Sheets read failed. Check GOOGLE_APPS_SCRIPT_URL, DASHBOARD_API_TOKEN, and the Apps Script deployment.",details:error.message});
+   // Apps Script may be temporarily unavailable or misconfigured. Fall back to the
+   // published CSV export so the dashboard remains readable instead of disconnecting.
+   appsScriptError=error.message||"Apps Script read failed";
+   console.error("Apps Script read failed; falling back to published CSV:",appsScriptError);
   }
   if(!data){
    const sheets=await Promise.all(TABS.map(async name=>{try{return await readTabCsv(name)}catch(e){return {name,found:false,headers:[],rows:[],error:"Read failed: "+e.message}}}));
    data={ok:true,spreadsheetId:ID,generatedAt:new Date().toISOString(),sheets};
+   if(appsScriptError)source="Google Sheets CSV export (Apps Script fallback)";
   } else {
    const existing=new Set((data.sheets||[]).map(s=>String(s.name||"").trim().toUpperCase()));
    if(!existing.has("NAP LOCATOR")){
