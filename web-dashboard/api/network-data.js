@@ -53,7 +53,7 @@ module.exports=async function(req,res){
    const sheets=await Promise.all(TABS.map(async name=>{try{return await readTabCsv(name)}catch(e){return {name,found:false,headers:[],rows:[],error:"Read failed: "+e.message}}}));
    data={ok:true,spreadsheetId:ID,generatedAt:new Date().toISOString(),sheets};
   }
-  data.sheets=(data.sheets||[]).map(s=>({...s,headers:Array.isArray(s.headers)?s.headers:[],rows:Array.isArray(s.rows)?s.rows:[]}));
+  data.sheets=(data.sheets||[]).map(s=>({...s,headers:Array.isArray(s.headers)?s.headers:[],rows:(Array.isArray(s.rows)?s.rows:[]).map(row=>{if(s.name==="DAILY REPORT")return row;const { _cells, ...compactRow }=row;return compactRow;})}));
   if(!data.sheets.some(s=>s.found))return res.status(502).json({ok:false,error:"Could not read the expected worksheet tabs. Verify sheet access and exact tab names.",sheets:data.sheets});
   return res.status(200).json({...data,ok:true,source:data.source||source,generatedAt:data.generatedAt||new Date().toISOString()});
  }catch(e){
