@@ -57,8 +57,7 @@ function renderDailyReport(sheet){
  summaryTable("LCP PROVINCE SUMMARY",["PROVINCE","TICKET / UP","DOWN","TOTAL","% DOWN"],lcpSummary)+
  summaryTable("NAP PROVINCE SUMMARY",["PROVINCE","UP","DOWN","TOTAL","% DOWN"],napSummary)+
  makeTable("BACKBONE / BB FAULT DETAILS",["TYPE","TICKET","NODES / LINKS","DOWN SINCE"],bb,true)+
- makeTable("OLT DETAIL VALUES",["PROVINCE","TICKET / UP","IMPACT / DOWN","NODES / TOTAL","UPDATED / %"],olt,true)+
- makeTable("LCP DOWN DETAILS",["PROVINCE","TICKET","IMPACT TYPE","NODES / LINKS","OLT PORT","DOWN SINCE"],lcp,true)+
+ (()=>{const db=(payload?.sheets||[]).find(s=>s.name==="DATABASE");const downRows=(type)=>((db?.rows)||[]).filter(r=>field(r,"TYPE").trim().toUpperCase()===type&&statusOf(r).includes("running")).map(r=>[field(r,"TYPE/PROVINCE","PROVINCE","TYPE / PROVINCE"),field(r,"TICKET","TICKET ID"),field(r,"IMPACT TYPE"),field(r,"AFFECTED NODES/LINKS","AFFECTED NODES / LINKS","NODES / LINKS"),field(r,"DOWNTIME","DOWN SINCE","DATE RECEIVED")]);const oltDown=downRows("OLT");const bbDown=downRows("BB");return makeTable("OLT DOWN DETAILS · "+oltDown.length+" running",["PROVINCE","TICKET","IMPACT TYPE","NODES / LINKS","DOWN SINCE"],oltDown,true)+makeTable("BB DOWN DETAILS · "+bbDown.length+" running",["PROVINCE","TICKET","IMPACT TYPE","NODES / LINKS","DOWN SINCE"],bbDown,true)})()+
  makeTable("NAP DOWN DETAILS",["PROVINCE","TICKET","IMPACT TYPE","NODES / LINKS","DOWN SINCE"],nap,true)+
  '<div class="daily-note">Source: '+esc(payload?.source||"Google Sheets")+' · '+rows.length+' non-empty source rows · last refreshed '+esc(payload?.generatedAt?new Date(payload.generatedAt).toLocaleString("en-PH",{timeZone:"Asia/Manila"}):"just now")+'. Values refresh from the sheet every 30 seconds.</div>';
 }
