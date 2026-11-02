@@ -24,7 +24,7 @@ function rowsToSheet(name,matrix){
  if(!matrix.length)return {name,found:false,headers:[],rows:[],error:"Empty or unavailable tab"};
  const headers=matrix[0].map((h,i)=>String(h||"COLUMN_"+(i+1)).trim());
  const rows=matrix.slice(1).map((cells,i)=>{
-  const record={_rowNumber:i+2};
+  const record={_rowNumber:i+2,...(name==="DAILY REPORT"?{_cells:cells.slice()}:{})};
   headers.forEach((h,j)=>record[h]=cells[j]??"");
   return record;
  }).filter((r,i)=>matrix[i+1].some(v=>String(v??"").trim()));
@@ -73,6 +73,7 @@ module.exports=async function(req,res){
    if(appsScriptError)source="Published Google Sheets CSV (Apps Script fallback)";
   }
   const sheets=(data.sheets||[]).map(s=>({...s,headers:Array.isArray(s.headers)?s.headers:[],rows:(Array.isArray(s.rows)?s.rows:[]).map(row=>{
+   if(tab.name==="DAILY REPORT")return row;
    const {_cells,...compactRow}=row||{};
    return compactRow;
   })}));
