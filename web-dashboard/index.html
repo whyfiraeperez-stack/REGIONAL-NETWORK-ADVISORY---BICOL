@@ -80,7 +80,28 @@ function renderDailyReport(sheet){
  '<div class="daily-note">Source: '+esc(payload?.source||"Google Sheets")+' · '+rows.length+' non-empty source rows · last refreshed '+esc(payload?.generatedAt?new Date(payload.generatedAt).toLocaleString("en-PH",{timeZone:"Asia/Manila"}):"just now")+'. Values refresh from the sheet every 30 seconds.</div>';
 }
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
-async function refresh(){ $("refresh").disabled=true;$("syncStatus").textContent="● Syncing…";try{const r=await fetch("/api/network-data",{cache:"no-store"});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||"Spreadsheet API request failed");payload=d;$("error").style.display="none";$("dot").classList.remove("off");$("connection").textContent="Connected · auto-sync";$("syncStatus").textContent="● Spreadsheet connected";if($("lastSync"))$("lastSync").textContent="Last sync: "+new Date().toLocaleTimeString("en-PH",{timeZone:"Asia/Manila"});const years=new Set();((d.sheets||[]).find(s=>s.name==="DATABASE")?.rows||[]).forEach(r=>{const v=field(r,"DOWNTIME","DATE RECEIVED","DATE RESTORED");const m=v.match(/20\d{2}/);if(m)years.add(m[0])});const y=$("year"),old=y.value;y.innerHTML='<option value="all">All years</option>'+[...years].sort().reverse().map(a=>'<option value="'+a+'">'+a+'</option>').join("");y.value=[...years].includes(old)?old:"all";render()}catch(e){$("error").style.display="block";$("error").textContent="Spreadsheet connection error: "+e.message+" · Check Vercel environment variables and Apps Script deployment.";$("dot").classList.add("off");$("connection").textContent="Connection issue";$("syncStatus").textContent="● Disconnected"}finally{$("refresh").disabled=false}}
+async function refresh(){
+ $("refresh").disabled=true;$("syncStatus").textContent="● Syncing…";
+ try{
+  const needed=["DATABASE"];
+  if(view==="DAILY REPORT")needed.push("DAILY REPORT");
+  else if(!["overview","DATABASE","report","GNOC UPDATE"].includes(view))needed.push(view);
+  for(const name of needed){
+   const r=await fetch("/api/network-data?sheet="+encodeURIComponent(name),{cache:"no-store"});
+   const d=await r.json();
+   if(!r.ok||!d.ok)throw new Error(d.error||("Spreadsheet API request failed for "+name));
+   payload={...(payload||{}),...d,sheets:[...((payload&&payload.sheets)||[]).filter(s=>s.name!==name),...(d.sheets||[])]};
+  }
+  if(!payload)throw new Error("No spreadsheet data was returned.");
+  $("error").style.display="none";$("dot").classList.remove("off");$("connection").textContent="Connected · auto-sync";$("syncStatus").textContent="● Spreadsheet connected";
+  if($("lastSync"))$("lastSync").textContent="Last sync: "+new Date().toLocaleTimeString("en-PH",{timeZone:"Asia/Manila"});
+  const years=new Set();((payload.sheets||[]).find(s=>s.name==="DATABASE")?.rows||[]).forEach(r=>{const v=field(r,"DOWNTIME","DATE RECEIVED","DATE RESTORED");const m=v.match(/20\\d{2}/);if(m)years.add(m[0])});
+  const y=$("year"),old=y.value;y.innerHTML='<option value="all">All years</option>'+[...years].sort().reverse().map(a=>'<option value="'+a+'">'+a+'</option>').join("");y.value=[...years].includes(old)?old:"all";render();
+ }catch(e){
+  $("error").style.display="block";$("error").textContent="Spreadsheet connection error: "+e.message+" · Check Google Sheets publishing and the selected worksheet.";
+  $("dot").classList.add("off");$("connection").textContent="Connection issue";$("syncStatus").textContent="● Disconnected";
+ }finally{$("refresh").disabled=false}
+}
 function exportCsv(){if(!payload)return;const sh=(payload.sheets||[]).find(s=>s.name===view)|| (payload.sheets||[]).find(s=>s.name==="DATABASE");if(!sh)return;const rows=view==="overview"||view==="report"?((payload.sheets||[]).find(s=>s.name==="DAILY REPORT")?.rows||[]):sh.rows;const csv=[sh.headers,...rows.map(r=>sh.headers.map(h=>String(r[h]??"")))].map(row=>row.map(v=>'"'+v.replace(/"/g,'""')+'"').join(",")).join("\r\n");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download=(sh.name||"report").toLowerCase().replace(/\s+/g,"-")+".csv";a.click();URL.revokeObjectURL(a.href)}
-document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll("[data-view]").forEach(n=>n.classList.toggle("active",n===b));view=b.dataset.view;$("crumb").textContent=view==="overview"?"Overview":view;$("query").value="";render()}));$("refresh").addEventListener("click",refresh);$("export").addEventListener("click",exportCsv);["query","statusFilter","year","month","date"].forEach(id=>$(id).addEventListener("input",render));$("auto").addEventListener("change",()=>{if(timer)clearInterval(timer);if($("auto").checked)timer=setInterval(()=>{if(document.visibilityState==="visible")refresh()},30000)});document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&$("auto").checked)refresh()});refresh();timer=setInterval(()=>{if(document.visibilityState==="visible"&&$("auto").checked)refresh()},30000);
+document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>{document.querySelectorAll("[data-view]").forEach(n=>n.classList.toggle("active",n===b));view=b.dataset.view;$("crumb").textContent=view==="overview"?"Overview":view;$("query").value="";refresh()}));$("refresh").addEventListener("click",refresh);$("export").addEventListener("click",exportCsv);["query","statusFilter","year","month","date"].forEach(id=>$(id).addEventListener("input",render));$("auto").addEventListener("change",()=>{if(timer)clearInterval(timer);if($("auto").checked)timer=setInterval(()=>{if(document.visibilityState==="visible")refresh()},30000)});document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&$("auto").checked)refresh()});refresh();timer=setInterval(()=>{if(document.visibilityState==="visible"&&$("auto").checked)refresh()},30000);
 </script></body></html>
