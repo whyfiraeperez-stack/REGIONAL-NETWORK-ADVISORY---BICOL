@@ -24,7 +24,7 @@ function rowsToSheet(name,matrix){
  if(!matrix.length)return {name,found:false,headers:[],rows:[],error:"Empty or unavailable tab"};
  const headers=matrix[0].map((h,i)=>String(h||"COLUMN_"+(i+1)).trim());
  const rows=matrix.slice(1).map((cells,i)=>{
-  const record={_rowNumber:i+2,_cells:cells.slice()};
+  const record={_rowNumber:i+2};
   headers.forEach((h,j)=>record[h]=cells[j]??"");
   return record;
  }).filter((r,i)=>matrix[i+1].some(v=>String(v??"").trim()));
@@ -52,26 +52,42 @@ module.exports=async function(req,res){
  res.setHeader("X-Content-Type-Options","nosniff");
  if(req.method!=="GET"){res.setHeader("Allow","GET");return res.status(405).json({ok:false,error:"Method not allowed"});}
  try{
+  const requested=String(req.query?.sheet||"DATABASE").trim().toUpperCase();
+  const tab=TABS.find(item=>item.name.toUpperCase()===requested);
+  if(!tab)return res.status(400).json({ok:false,error:"Unknown worksheet. Request one of: "+TABS.map(t=>t.name).join(", ")});
   let data,source="Published Google Sheets CSV",appsScriptError="";
-  try{data=await readFromAppsScript();if(data)source="Authenticated Google Apps Script";}catch(error){
+  try{
+   const full=await readFromAppsScript();
+   if(full){
+    const match=(full.sheets||[]).find(s=>String(s.name||"").trim().toUpperCase()===requested);
+    if(match){data={...full,sheets:[match]};source="Authenticated Google Apps Script";}
+    else throw new Error("Apps Script response did not include worksheet "+tab.name);
+   }
+  }catch(error){
    appsScriptError=error.message||"Apps Script read failed";
    console.error("Apps Script read failed; falling back to published CSV:",appsScriptError);
   }
   if(!data){
-   const sheets=await Promise.all(TABS.map(async tab=>{try{return await readTabCsv(tab)}catch(e){return {name:tab.name,found:false,headers:[],rows:[],error:"Read failed: "+e.message}}}));
-   data={ok:true,spreadsheetId:ID,generatedAt:new Date().toISOString(),sheets};
+   const sheet=await readTabCsv(tab);
+   data={ok:true,spreadsheetId:ID,generatedAt:new Date().toISOString(),sheets:[sheet]};
    if(appsScriptError)source="Published Google Sheets CSV (Apps Script fallback)";
-  }else{
-   const existing=new Set((data.sheets||[]).map(s=>String(s.name||"").trim().toUpperCase()));
-   for(const tab of TABS){
-    if(!existing.has(tab.name)){
-     try{data.sheets.push(await readTabCsv(tab));}catch(e){data.sheets.push({name:tab.name,found:false,headers:[],rows:[],error:"Read failed: "+e.message});}
-    }
-   }
   }
-  data.sheets=(data.sheets||[]).map(s=>({...s,headers:Array.isArray(s.headers)?s.headers:[],rows:(Array.isArray(s.rows)?s.rows:[]).map(row=>{if(s.name==="DAILY REPORT")return row;const {_cells,...compactRow}=row;return compactRow;})}));
-  if(!data.sheets.some(s=>s.found))return res.status(502).json({ok:false,error:"Could not read any published worksheet CSV. Confirm the entire spreadsheet is published to the web and each worksheet gid is correct.",sheets:data.sheets});
-  return res.status(200).json({...data,ok:true,source:data.source||source,generatedAt:data.generatedAt||new Date().toISOString()});
+  const sheets=(data.sheets||[]).map(s=>({...s,headers:Array.isArray(s.headers)?s.headers:[],rows:(Array.isArray(s.rows)?s.rows:[]).map(row=>{
+   const {_cells,...compactRow}=row||{};
+   return compactRow;
+  })}));
+  if(!sheets.some(s=>s.found)){
+   const failed=sheets[0]||{};
+   return res.status(502).json({ok:false,error:failed.error||("Could not read worksheet "+tab.name+". Confirm it is published and the worksheet gid is correct."),worksheet:tab.name,sheets});
+  }
+  const payload={...data,ok:true,source:data.source||source,worksheet:tab.name,generatedAt:data.generatedAt||new Date().toISOString(),sheets};
+  const serialized=JSON.stringify(payload);
+  const bytes=Buffer.byteLength(serialized,"utf8");
+  console.log("Google Sheets worksheet response",tab.name,"rows",sheets[0]?.rows?.length||0,"bytes",bytes);
+  if(bytes>5_500_000){
+   return res.status(413).json({ok:false,error:"Worksheet "+tab.name+" is still too large for a single response ("+bytes+" bytes). It needs row pagination or narrower columns.",worksheet:tab.name,bytes});
+  }
+  return res.status(200).json(payload);
  }catch(e){
   console.error("Google Sheets sync failed:",e);
   return res.status(502).json({ok:false,error:"Google Sheets sync failed.",details:e.message});
