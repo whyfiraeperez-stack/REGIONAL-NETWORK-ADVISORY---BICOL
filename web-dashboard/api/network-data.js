@@ -8,14 +8,13 @@ const TABS=[
  {name:"GNOC",gid:"1898344567"},
  {name:"NAP LOCATOR",gid:"1924056980"}
 ];
-
 function parseCsv(s){
  const rows=[];let row=[],cell="",quoted=false;
  for(let i=0;i<s.length;i++){
   const c=s[i];
-  if(c=='"'){if(quoted&&s[i+1]=='"'){cell+='"';i++;}else quoted=!quoted;}
+  if(c==='"'){if(quoted&&s[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;}
   else if(c===","&&!quoted){row.push(cell);cell="";}
-  else if((c==="\\n"||c==="\\r")&&!quoted){if(c==="\\r"&&s[i+1]==="\\n")i++;row.push(cell);if(row.some(x=>x.trim()))rows.push(row);row=[];cell="";}
+  else if((c==="\n"||c==="\r")&&!quoted){if(c==="\r"&&s[i+1]==="\n")i++;row.push(cell);if(row.some(x=>x.trim()))rows.push(row);row=[];cell="";}
   else cell+=c;
  }
  if(cell.length||row.length){row.push(cell);if(row.some(x=>x.trim()))rows.push(row);}
@@ -35,7 +34,7 @@ async function readTabCsv(tab){
  const url="https://docs.google.com/spreadsheets/d/e/"+PUBLISHED_ID+"/pub?gid="+tab.gid+"&single=true&output=csv&_="+Date.now();
  const response=await fetch(url,{cache:"no-store",redirect:"follow"});
  const body=await response.text();
- if(!response.ok||/<html|accounts\\.google\\.com|sign in|google\\.visualization\\.Query\\.setResponse/i.test(body.slice(0,500)))
+ if(!response.ok||/<html|accounts\.google\.com|sign in|google\.visualization\.Query\.setResponse/i.test(body.slice(0,500)))
   return {name:tab.name,found:false,headers:[],rows:[],error:"Published CSV unavailable for gid "+tab.gid};
  return rowsToSheet(tab.name,parseCsv(body));
 }
