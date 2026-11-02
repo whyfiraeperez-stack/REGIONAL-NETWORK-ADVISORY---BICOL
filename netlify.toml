@@ -1,2 +1,6 @@
 [build]
-  publish = "."
+  publish = "web-dashboard"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
