@@ -1,11 +1,13 @@
 const ID = "1DgYA7-nM4DoVg70YOEGlu4Au7nb7xNpdSzyW8BZFsOg";
+const PUBLISHED_ID = "2PACX-1vTojZur9YkReg6paEkkqvsNscFzIW1dH7WwYfG7NqJSw-0xAEUwRJse_ILc1qLXidGK8Sno5ADAbhTo";
+const NAP_GID = "1924056980";
 function parseCsv(s) {
   const rows=[]; let row=[], cell="", quoted=false;
   for(let i=0;i<s.length;i++){
     const c=s[i];
-    if(c==='"'){ if(quoted && s[i+1]==='"'){cell+='"';i++;} else quoted=!quoted; }
+    if(c=='"'){ if(quoted && s[i+1]=='"'){cell+='"';i++;} else quoted=!quoted; }
     else if(c===',' && !quoted){row.push(cell);cell="";}
-    else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&s[i+1]==='\n')i++;row.push(cell);if(row.some(v=>v.trim()))rows.push(row);row=[];cell="";}
+    else if((c==='\\n'||c==='\\r')&&!quoted){if(c==='\\r'&&s[i+1]==='\\n')i++;row.push(cell);if(row.some(v=>v.trim()))rows.push(row);row=[];cell="";}
     else cell+=c;
   }
   if(cell.length||row.length){row.push(cell);if(row.some(v=>v.trim()))rows.push(row);}
@@ -22,11 +24,11 @@ module.exports = async function(req,res) {
   res.setHeader("X-Content-Type-Options","nosniff");
   if(req.method!=="GET"){res.setHeader("Allow","GET");return res.status(405).json({ok:false,error:"Method not allowed"});}
   try {
-    const url="https://docs.google.com/spreadsheets/d/"+ID+"/gviz/tq?tqx=out:csv&sheet="+encodeURIComponent("NAP LOCATOR")+"&tq="+encodeURIComponent("select *")+"&_="+Date.now();
-    const response=await fetch(url,{cache:"no-store"});
+    const url="https://docs.google.com/spreadsheets/d/e/"+PUBLISHED_ID+"/pub?gid="+NAP_GID+"&single=true&output=csv&_="+Date.now();
+    const response=await fetch(url,{cache:"no-store",redirect:"follow"});
     const body=await response.text();
-    if(!response.ok||/<html|accounts\.google\.com|sign in|google\.visualization\.Query\.setResponse/i.test(body.slice(0,500)))
-      return res.status(502).json({ok:false,error:"NAP LOCATOR worksheet is not publicly readable. Check Google Sheets sharing settings."});
+    if(!response.ok||/<html|accounts\\.google\\.com|sign in|google\\.visualization\\.Query\\.setResponse/i.test(body.slice(0,500)))
+      return res.status(502).json({ok:false,error:"Published NAP LOCATOR CSV is unavailable. Confirm the spreadsheet is published to the web."});
     const matrix=parseCsv(body);
     if(!matrix.length)return res.status(502).json({ok:false,error:"NAP LOCATOR worksheet is empty or unavailable."});
     const headers=matrix[0].map((v,i)=>String(v||"COLUMN_"+(i+1)).trim());
@@ -38,10 +40,10 @@ module.exports = async function(req,res) {
       area:String(pick(row,headers,["AREA","BARANGAY","LOCATION","ADDRESS","SITE"])).trim(),
       lcpCode:String(pick(row,headers,["LCP CODE","LCP","LCP NAME","LCP ID"])).trim()
     })).filter(r=>r.napCode&&r.latitude!==""&&r.longitude!==""&&Number.isFinite(Number(r.latitude))&&Number.isFinite(Number(r.longitude))&&Number(r.latitude)>=-90&&Number(r.latitude)<=90&&Number(r.longitude)>=-180&&Number(r.longitude)<=180);
-    const unique=new Map();records.forEach(r=>{r.latitude=Number(r.latitude);r.longitude=Number(r.longitude);r.noOfPorts=r.noOfPorts||"—";r.area=r.area||"Unknown area";r.lcpCode=r.lcpCode||((r.napCode.match(/\bLP\s*\d+\b/i)||[])[0]||"—").replace(/\s+/g," ").toUpperCase();unique.set(r.napCode,r);});
+    const unique=new Map();records.forEach(r=>{r.latitude=Number(r.latitude);r.longitude=Number(r.longitude);r.noOfPorts=r.noOfPorts||"—";r.area=r.area||"Unknown area";r.lcpCode=r.lcpCode||((r.napCode.match(/\\bLP\\s*\\d+\\b/i)||[])[0]||"—").replace(/\\s+/g," ").toUpperCase();unique.set(r.napCode,r);});
     const finalRecords=[...unique.values()];
     if(!finalRecords.length)return res.status(502).json({ok:false,error:"NAP LOCATOR was read but no valid rows with NAP code and coordinates were found.",headers});
-    return res.status(200).json({ok:true,source:"Google Sheets · NAP LOCATOR",spreadsheetId:ID,worksheet:"NAP LOCATOR",generatedAt:new Date().toISOString(),count:finalRecords.length,headers,records:finalRecords});
+    return res.status(200).json({ok:true,source:"Published Google Sheets CSV · NAP LOCATOR",spreadsheetId:ID,worksheet:"NAP LOCATOR",generatedAt:new Date().toISOString(),count:finalRecords.length,headers,records:finalRecords});
   } catch(e) {
     console.error("NAP LOCATOR sync failed:",e);
     return res.status(502).json({ok:false,error:"NAP LOCATOR spreadsheet sync failed.",details:e.message});
