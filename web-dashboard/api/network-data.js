@@ -47,6 +47,7 @@ async function readFromAppsScript(){
  if(!response.ok||!body.ok||!Array.isArray(body.sheets))throw new Error(body.error||"Apps Script returned an invalid response");
  return body;
 }
+// Each request returns one worksheet only; the frontend loads tabs on demand.
 module.exports=async function(req,res){
  res.setHeader("Cache-Control","no-store, max-age=0, must-revalidate");
  res.setHeader("X-Content-Type-Options","nosniff");
