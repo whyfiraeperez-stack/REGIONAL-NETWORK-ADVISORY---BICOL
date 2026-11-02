@@ -80,6 +80,21 @@ function renderDailyReport(sheet){
  '<div class="daily-note">Source: '+esc(payload?.source||"Google Sheets")+' · '+rows.length+' non-empty source rows · last refreshed '+esc(payload?.generatedAt?new Date(payload.generatedAt).toLocaleString("en-PH",{timeZone:"Asia/Manila"}):"just now")+'. Values refresh from the sheet every 30 seconds.</div>';
 }
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+async function loadWorksheet(name){
+ const allRows=[];let first=null,page=1,hasMore=true;
+ while(hasMore){
+  const r=await fetch("/api/network-data?sheet="+encodeURIComponent(name)+"&page="+page+"&limit=250",{cache:"no-store"});
+  const d=await r.json();
+  if(!r.ok||!d.ok)throw new Error(d.error||("Spreadsheet API request failed for "+name+" page "+page));
+  if(!first)first=d;
+  const sh=(d.sheets||[])[0];if(!sh)throw new Error("No worksheet data returned for "+name);
+  allRows.push(...(sh.rows||[]));
+  hasMore=!!d.pagination?.hasMore;page++;
+  if(page>1000)throw new Error("Too many pages while loading "+name);
+ }
+ const sourceSheet=first.sheets[0];
+ return {...first,sheets:[{...sourceSheet,rows:allRows}],pagination:{totalRows:allRows.length}};
+}
 async function refresh(){
  $("refresh").disabled=true;$("syncStatus").textContent="● Syncing…";
  try{
@@ -87,9 +102,7 @@ async function refresh(){
   if(view==="DAILY REPORT")needed.push("DAILY REPORT");
   else if(!["overview","DATABASE","report","GNOC UPDATE"].includes(view))needed.push(view);
   for(const name of needed){
-   const r=await fetch("/api/network-data?sheet="+encodeURIComponent(name),{cache:"no-store"});
-   const d=await r.json();
-   if(!r.ok||!d.ok)throw new Error(d.error||("Spreadsheet API request failed for "+name));
+   const d=await loadWorksheet(name);
    payload={...(payload||{}),...d,sheets:[...((payload&&payload.sheets)||[]).filter(s=>s.name!==name),...(d.sheets||[])]};
   }
   if(!payload)throw new Error("No spreadsheet data was returned.");
