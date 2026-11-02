@@ -82,12 +82,18 @@ module.exports=async function(req,res){
    const failed=sheets[0]||{};
    return res.status(502).json({ok:false,error:failed.error||("Could not read worksheet "+tab.name+". Confirm it is published and the worksheet gid is correct."),worksheet:tab.name,sheets});
   }
-  const payload={...data,ok:true,source:data.source||source,worksheet:tab.name,generatedAt:data.generatedAt||new Date().toISOString(),sheets};
+  const page=Math.max(1,Number.parseInt(req.query?.page||"1",10)||1);
+  const limit=Math.min(500,Math.max(50,Number.parseInt(req.query?.limit||"250",10)||250));
+  const fullRows=sheets[0].rows||[];
+  const totalRows=fullRows.length;
+  const pageRows=fullRows.slice((page-1)*limit,page*limit);
+  const pagedSheets=[{...sheets[0],rows:pageRows}];
+  const payload={...data,ok:true,source:data.source||source,worksheet:tab.name,generatedAt:data.generatedAt||new Date().toISOString(),sheets:pagedSheets,pagination:{page,limit,totalRows,totalPages:Math.max(1,Math.ceil(totalRows/limit)),hasMore:page*limit<totalRows}};
   const serialized=JSON.stringify(payload);
   const bytes=Buffer.byteLength(serialized,"utf8");
-  console.log("Google Sheets worksheet response",tab.name,"rows",sheets[0]?.rows?.length||0,"bytes",bytes);
+  console.log("Google Sheets worksheet response",tab.name,"page",page,"rows",pageRows.length,"of",totalRows,"bytes",bytes);
   if(bytes>5_500_000){
-   return res.status(413).json({ok:false,error:"Worksheet "+tab.name+" is still too large for a single response ("+bytes+" bytes). It needs row pagination or narrower columns.",worksheet:tab.name,bytes});
+   return res.status(413).json({ok:false,error:"Page "+page+" of worksheet "+tab.name+" is too large ("+bytes+" bytes). Reduce the page size.",worksheet:tab.name,bytes,limit});
   }
   return res.status(200).json(payload);
  }catch(e){
