@@ -54,12 +54,21 @@ function doPost(e) {
         return json_({ ok: false, error: "Provide a range and a two-dimensional values array" });
       }
 
-      const allowed = JSON.parse(PropertiesService.getScriptProperties().getProperty("ALLOWED_EDIT_RANGES") || "{}");
+      if (name !== "DATABASE") {
+        return json_({ ok: false, error: "Dashboard editing is enabled for DATABASE only" });
+      }
+      const allowed = JSON.parse(PropertiesService.getScriptProperties().getProperty("ALLOWED_EDIT_RANGES") || '{"DATABASE":["A2:AD50000"]}');
       const ranges = allowed[name] || [];
       const target = sheet.getRange(rangeA1);
       const targetA1 = target.getA1Notation();
-      if (!ranges.some(rule => isRangeInside_(sheet, target, String(rule)))) {
+      if (target.getRow() < 2 || !ranges.some(rule => isRangeInside_(sheet, target, String(rule)))) {
         return json_({ ok: false, error: "This cell range is not enabled for dashboard editing" });
+      }
+      const formulaColumns = formulaColumns_(sheet);
+      for (let col = target.getColumn(); col <= target.getLastColumn(); col++) {
+        if (formulaColumns.indexOf(col) !== -1) {
+          return json_({ ok: false, error: "Update blocked: column " + columnLetter_(col) + " contains formulas and is protected" });
+        }
       }
       if (target.getNumRows() !== values.length || target.getNumColumns() !== values[0].length ||
           !values.every(row => row.length === values[0].length)) {
@@ -93,12 +102,38 @@ function readSheet_(sheet) {
   const values = sheet.getDataRange().getDisplayValues();
   if (!values.length) return { name: sheet.getName(), found: true, headers: [], rows: [] };
   const headers = values[0].map((v, i) => String(v || "COLUMN_" + (i + 1)).trim());
+  const formulas = formulaColumns_(sheet);
+  const editableColumns = headers.map((h, i) => ({ name: h, index: i + 1 }))
+    .filter(col => sheet.getName() === "DATABASE" && formulas.indexOf(col.index) === -1)
+    .map(col => col.name);
   const rows = values.slice(1).map((line, i) => {
     const row = { _rowNumber: i + 2 };
     headers.forEach((h, j) => row[h] = line[j] == null ? "" : line[j]);
     return row;
   }).filter(row => headers.some(h => String(row[h] || "").trim()));
-  return { name: sheet.getName(), found: true, headers, rows };
+  return { name: sheet.getName(), found: true, headers, rows, editableColumns };
+}
+
+function formulaColumns_(sheet) {
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow < 2 || lastCol < 1) return [];
+  const formulas = sheet.getRange(2, 1, lastRow - 1, lastCol).getFormulas();
+  const protectedCols = [];
+  for (let c = 0; c < lastCol; c++) {
+    if (formulas.some(row => row[c] !== "")) protectedCols.push(c + 1);
+  }
+  return protectedCols;
+}
+
+function columnLetter_(column) {
+  let result = "";
+  while (column > 0) {
+    const rem = (column - 1) % 26;
+    result = String.fromCharCode(65 + rem) + result;
+    column = Math.floor((column - 1) / 26);
+  }
+  return result;
 }
 
 function isRangeInside_(sheet, target, allowedA1) {
