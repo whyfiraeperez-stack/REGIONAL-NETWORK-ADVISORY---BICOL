@@ -1,3 +1,0 @@
-/api/network-data /.netlify/functions/network-data 200
-/api/nap-locator /.netlify/functions/nap-locator 200
-/api/sheets-write /.netlify/functions/sheets-write 200
