@@ -88,7 +88,7 @@ async function readAppsScript(env) {
   const response = await fetch(env.GOOGLE_APPS_SCRIPT_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token: env.DASHBOARD_API_TOKEN }),
+    body: JSON.stringify({ token: env.DASHBOARD_API_TOKEN, sheet: "NAP LOCATOR" }),
     cache: "no-store"
   });
   const body = await response.json();
